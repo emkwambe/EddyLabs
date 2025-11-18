@@ -14,9 +14,17 @@ import {
   getRiskLabel,
 } from './config'
 
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
-})
+// Lazy initialization to avoid build-time errors
+let openaiClient: OpenAI | null = null
+
+function getOpenAI(): OpenAI {
+  if (!openaiClient) {
+    openaiClient = new OpenAI({
+      apiKey: process.env.OPENAI_API_KEY,
+    })
+  }
+  return openaiClient
+}
 
 /**
  * Main analysis function that orchestrates the AI analysis pipeline
@@ -79,7 +87,7 @@ ${text.substring(0, 3000)}
 
 Respond with ONLY the category name, nothing else.`
 
-  const response = await openai.chat.completions.create({
+  const response = await getOpenAI().chat.completions.create({
     model: 'gpt-4o-mini',
     messages: [{ role: 'user', content: prompt }],
     max_tokens: 50,
@@ -140,7 +148,7 @@ ${text.substring(0, 4000)}
 
 Return ONLY valid JSON, no other text.`
 
-  const response = await openai.chat.completions.create({
+  const response = await getOpenAI().chat.completions.create({
     model: 'gpt-4o-mini',
     messages: [{ role: 'user', content: prompt }],
     max_tokens: 1500,
@@ -204,7 +212,7 @@ Look for:
 
 Return ONLY a JSON array (can be empty if no issues found).`
 
-  const response = await openai.chat.completions.create({
+  const response = await getOpenAI().chat.completions.create({
     model: 'gpt-4o-mini',
     messages: [{ role: 'user', content: prompt }],
     max_tokens: 2000,
@@ -367,7 +375,7 @@ Return JSON:
 
 Be specific, actionable, and consumer-friendly. Focus on protecting the consumer's interests.`
 
-  const response = await openai.chat.completions.create({
+  const response = await getOpenAI().chat.completions.create({
     model: 'gpt-4o-mini',
     messages: [{ role: 'user', content: prompt }],
     max_tokens: 1500,

@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { Suspense, useState } from 'react'
 import Link from 'next/link'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
@@ -10,7 +10,7 @@ import { Input } from '@/components/ui/Input'
 import { Card, CardHeader, CardContent, CardFooter } from '@/components/ui/Card'
 import { Shield } from 'lucide-react'
 
-export default function LoginPage() {
+function LoginForm() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const redirect = searchParams.get('redirect') || '/dashboard'
@@ -91,82 +91,90 @@ export default function LoginPage() {
   }
 
   return (
+    <Card className="w-full max-w-md">
+      <CardHeader>
+        <div className="text-center">
+          <Shield className="h-10 w-10 text-primary-600 mx-auto mb-2" />
+          <h1 className="text-2xl font-bold">Welcome Back</h1>
+          <p className="text-gray-600 text-sm">Sign in to your account</p>
+        </div>
+      </CardHeader>
+
+      <CardContent>
+        <form onSubmit={handleSubmit} className="space-y-4">
+          {error && (
+            <div className="p-3 bg-danger-50 border border-danger-200 rounded-lg text-sm text-danger-700">
+              {error}
+            </div>
+          )}
+
+          <Input
+            id="email"
+            type="email"
+            label="Email"
+            placeholder="you@example.com"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            required
+          />
+
+          <Input
+            id="password"
+            type="password"
+            label="Password"
+            placeholder="••••••••"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            required
+          />
+
+          <Button type="submit" className="w-full" isLoading={isLoading}>
+            Sign In
+          </Button>
+        </form>
+
+        <div className="mt-4">
+          <div className="relative">
+            <div className="absolute inset-0 flex items-center">
+              <div className="w-full border-t border-gray-200" />
+            </div>
+            <div className="relative flex justify-center text-sm">
+              <span className="bg-white px-2 text-gray-500">Or</span>
+            </div>
+          </div>
+
+          <Button
+            variant="secondary"
+            className="w-full mt-4"
+            onClick={handleDemoLogin}
+            isLoading={isLoading}
+          >
+            Try Demo Account
+          </Button>
+        </div>
+      </CardContent>
+
+      <CardFooter>
+        <p className="text-sm text-gray-600 text-center w-full">
+          Don't have an account?{' '}
+          <Link href="/signup" className="text-primary-600 hover:underline font-medium">
+            Sign up
+          </Link>
+        </p>
+      </CardFooter>
+    </Card>
+  )
+}
+
+export default function LoginPage() {
+  return (
     <div className="min-h-screen bg-gray-50">
       <Header />
 
       <main className="flex items-center justify-center py-12 px-4">
-        <Card className="w-full max-w-md">
-          <CardHeader>
-            <div className="text-center">
-              <Shield className="h-10 w-10 text-primary-600 mx-auto mb-2" />
-              <h1 className="text-2xl font-bold">Welcome Back</h1>
-              <p className="text-gray-600 text-sm">Sign in to your account</p>
-            </div>
-          </CardHeader>
-
-          <CardContent>
-            <form onSubmit={handleSubmit} className="space-y-4">
-              {error && (
-                <div className="p-3 bg-danger-50 border border-danger-200 rounded-lg text-sm text-danger-700">
-                  {error}
-                </div>
-              )}
-
-              <Input
-                id="email"
-                type="email"
-                label="Email"
-                placeholder="you@example.com"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                required
-              />
-
-              <Input
-                id="password"
-                type="password"
-                label="Password"
-                placeholder="••••••••"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                required
-              />
-
-              <Button type="submit" className="w-full" isLoading={isLoading}>
-                Sign In
-              </Button>
-            </form>
-
-            <div className="mt-4">
-              <div className="relative">
-                <div className="absolute inset-0 flex items-center">
-                  <div className="w-full border-t border-gray-200" />
-                </div>
-                <div className="relative flex justify-center text-sm">
-                  <span className="bg-white px-2 text-gray-500">Or</span>
-                </div>
-              </div>
-
-              <Button
-                variant="secondary"
-                className="w-full mt-4"
-                onClick={handleDemoLogin}
-                isLoading={isLoading}
-              >
-                Try Demo Account
-              </Button>
-            </div>
-          </CardContent>
-
-          <CardFooter>
-            <p className="text-sm text-gray-600 text-center w-full">
-              Don't have an account?{' '}
-              <Link href="/signup" className="text-primary-600 hover:underline font-medium">
-                Sign up
-              </Link>
-            </p>
-          </CardFooter>
-        </Card>
+        <Suspense fallback={<div className="w-full max-w-md h-96 animate-pulse bg-gray-100 rounded-lg" />}>
+          <LoginForm />
+        </Suspense>
       </main>
     </div>
   )

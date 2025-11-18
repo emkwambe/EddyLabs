@@ -7,7 +7,7 @@ import { Button } from '@/components/ui/Button'
 import { Shield, LogOut, User } from 'lucide-react'
 
 interface HeaderProps {
-  user?: { email: string } | null
+  user?: { email?: string } | null
 }
 
 export function Header({ user }: HeaderProps) {

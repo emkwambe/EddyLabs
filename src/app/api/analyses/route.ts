@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@/lib/supabase/server'
+import { createClient, createServiceClient } from '@/lib/supabase/server'
 import { analyzeDocument } from '@/lib/ai/analyzeDocument'
 import { extractTextFromDocument, isValidFileType, getFileSizeLimit } from '@/lib/ocr/extractText'
 
@@ -39,6 +39,7 @@ export async function GET() {
 export async function POST(request: NextRequest) {
   try {
     const supabase = await createClient()
+    const serviceClient = await createServiceClient() // For bypassing RLS on inserts
 
     const { data: { user }, error: authError } = await supabase.auth.getUser()
     if (authError || !user) {
@@ -175,14 +176,14 @@ export async function POST(request: NextRequest) {
         throw updateError
       }
 
-      // Insert red flags
+      // Insert red flags (using service client to bypass RLS)
       if (result.red_flags.length > 0) {
         const flagsToInsert = result.red_flags.map(flag => ({
           analysis_id: analysis.id,
           ...flag,
         }))
 
-        const { error: flagsError } = await supabase
+        const { error: flagsError } = await serviceClient
           .from('red_flags')
           .insert(flagsToInsert)
 
@@ -191,14 +192,14 @@ export async function POST(request: NextRequest) {
         }
       }
 
-      // Insert recommendations
+      // Insert recommendations (using service client to bypass RLS)
       if (result.recommendations.length > 0) {
         const recsToInsert = result.recommendations.map(rec => ({
           analysis_id: analysis.id,
           ...rec,
         }))
 
-        const { error: recsError } = await supabase
+        const { error: recsError } = await serviceClient
           .from('recommendations')
           .insert(recsToInsert)
 

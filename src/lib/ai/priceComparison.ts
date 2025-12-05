@@ -4,6 +4,7 @@
 
 import { createServiceClient } from '@/lib/supabase/server'
 import type { ExtractedFields, PriceComparison, VehicleInfo } from '@/lib/types'
+import { getComprehensivePricing } from '@/lib/api/externalApis'
 
 interface ServiceNecessityCheck {
   service: string
@@ -32,17 +33,34 @@ export async function comparePrices(
     let fairPriceMin = 0
     let fairPriceMax = 0
     let foundBenchmarks = false
+    let confidence: 'HIGH' | 'MEDIUM' | 'LOW' = 'LOW'
 
     for (const item of extractedFields.line_items) {
-      const { data, error } = await supabase.rpc('get_price_benchmark', {
-        p_service_name: item.description,
-        p_vehicle_type: 'sedan' // Default to sedan, could be enhanced with vehicle_info
-      })
+      // Try external APIs first (RepairPal, etc.)
+      const externalPricing = await getComprehensivePricing(
+        item.description,
+        extractedFields.shop_info?.zip_code || undefined
+      )
 
-      if (!error && data && data.length > 0 && data[0].found) {
-        fairPriceMin += data[0].price_min || 0
-        fairPriceMax += data[0].price_max || 0
+      if (externalPricing.hasPricing) {
+        // Use external pricing if available
+        fairPriceMin += externalPricing.localMin || externalPricing.nationalMin
+        fairPriceMax += externalPricing.localMax || externalPricing.nationalMax
         foundBenchmarks = true
+        confidence = externalPricing.confidence
+      } else {
+        // Fall back to internal database benchmarks
+        const { data, error } = await supabase.rpc('get_price_benchmark', {
+          p_service_name: item.description,
+          p_vehicle_type: 'sedan' // Default to sedan, could be enhanced with vehicle_info
+        })
+
+        if (!error && data && data.length > 0 && data[0].found) {
+          fairPriceMin += data[0].price_min || 0
+          fairPriceMax += data[0].price_max || 0
+          foundBenchmarks = true
+          confidence = 'MEDIUM'
+        }
       }
     }
 
@@ -76,7 +94,7 @@ export async function comparePrices(
       fairPriceMax: Math.round(fairPriceMax * 100) / 100,
       isOverpriced,
       potentialOvercharge: Math.round(potentialOvercharge * 100) / 100,
-      confidence: 'MEDIUM',
+      confidence,
     }
   } catch (error) {
     console.error('Price comparison error:', error)

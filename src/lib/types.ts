@@ -90,6 +90,14 @@ export interface ExtractedFields {
   auto_renewal: boolean | null
   cancellation_terms: string | null
   vehicle_info?: VehicleInfo | null
+  shop_info?: ShopInfo | null
+}
+
+export interface ShopInfo {
+  name: string | null
+  address: string | null
+  phone: string | null
+  zip_code: string | null
 }
 
 export interface VehicleInfo {
@@ -128,6 +136,7 @@ export interface AIAnalysisResult {
   fee_analysis?: FeeAnalysisResult | null
   double_billing_check?: DoubleBillingResult | null
   price_comparison?: PriceComparison | null
+  shop_reputation?: ShopReputationResult | null
 }
 
 export interface FeeAnalysisResult {
@@ -156,4 +165,18 @@ export interface PriceComparison {
   isOverpriced: boolean
   potentialOvercharge: number
   confidence: 'HIGH' | 'MEDIUM' | 'LOW'
+}
+
+export interface ShopReputationResult {
+  shopName: string
+  rating: number | null
+  totalReviews: number
+  verifiedBusiness: boolean
+  warnings: string[]
+  trustScore: number // 0-100
+  recentReviews: Array<{
+    rating: number
+    text: string
+    time: string
+  }>
 }

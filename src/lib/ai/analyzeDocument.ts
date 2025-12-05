@@ -16,6 +16,7 @@ import {
   checkDoubleBilling,
 } from './config'
 import { comparePrices, checkServiceNecessity } from './priceComparison'
+import { getShopReputation } from '@/lib/api/externalApis'
 
 // Lazy initialization to avoid build-time errors
 let openaiClient: OpenAI | null = null
@@ -53,7 +54,13 @@ export async function analyzeDocument(rawText: string): Promise<AIAnalysisResult
   // Step 5: Analyze fees (if line items exist)
   let feeAnalysis = null
   if (extractedFields.line_items && extractedFields.line_items.length > 0 && extractedFields.total_cost) {
-    const allItems = [...extractedFields.line_items, ...extractedFields.taxes_and_fees]
+    // Map taxes and fees to have the same structure as line items
+    const mappedFeesAndTaxes = extractedFields.taxes_and_fees.map(item => ({
+      description: item.name,
+      line_total: item.amount,
+      amount: item.amount,
+    }))
+    const allItems = [...extractedFields.line_items, ...mappedFeesAndTaxes]
     feeAnalysis = analyzeFees(allItems, extractedFields.total_cost)
 
     // Add fee analysis flag if suspicious
@@ -119,11 +126,46 @@ export async function analyzeDocument(rawText: string): Promise<AIAnalysisResult
     console.error('Service necessity check failed:', error)
   }
 
-  // Step 9: Recalculate risk score with all new flags
+  // Step 9: Shop reputation check (if applicable)
+  let shopReputation = null
+  try {
+    if (documentType === 'ESTIMATE_AUTO' && extractedFields.shop_info?.name) {
+      shopReputation = await getShopReputation(
+        extractedFields.shop_info.name,
+        extractedFields.shop_info.address || undefined
+      )
+
+      if (shopReputation) {
+        // Add red flag if shop has low trust score
+        if (shopReputation.trustScore < 50) {
+          redFlags.push({
+            flag_type: 'PREDATORY_TERM',
+            severity: 'HIGH',
+            explanation: `Shop reputation concern: ${shopReputation.shopName} has a low trust score (${shopReputation.trustScore}/100)${shopReputation.warnings.length > 0 ? '. ' + shopReputation.warnings.join('. ') : ''}.`,
+            snippet: null,
+          })
+        }
+
+        // Add warning if shop has concerning reviews
+        if (shopReputation.warnings.length > 0 && shopReputation.trustScore >= 50) {
+          redFlags.push({
+            flag_type: 'PREDATORY_TERM',
+            severity: 'MEDIUM',
+            explanation: `Shop reputation warning: ${shopReputation.warnings.join('. ')}`,
+            snippet: null,
+          })
+        }
+      }
+    }
+  } catch (error) {
+    console.error('Shop reputation check failed:', error)
+  }
+
+  // Step 10: Recalculate risk score with all new flags
   const finalRiskScore = calculateRiskScore(redFlags)
   const finalRiskLabel = getRiskLabel(finalRiskScore)
 
-  // Step 10: Generate summary and recommendations
+  // Step 11: Generate summary and recommendations
   const { summary, recommendations } = await generateSummaryAndAdvice(
     rawText,
     documentType,
@@ -133,7 +175,8 @@ export async function analyzeDocument(rawText: string): Promise<AIAnalysisResult
     feeAnalysis,
     doubleBillingCheck,
     priceComparison,
-    serviceNecessityChecks
+    serviceNecessityChecks,
+    shopReputation
   )
 
   return {
@@ -147,6 +190,7 @@ export async function analyzeDocument(rawText: string): Promise<AIAnalysisResult
     fee_analysis: feeAnalysis,
     double_billing_check: doubleBillingCheck,
     price_comparison: priceComparison,
+    shop_reputation: shopReputation,
   }
 }
 
@@ -205,6 +249,12 @@ async function extractFields(
     "make": manufacturer (e.g., Honda, Toyota) or null,
     "model": model name or null,
     "mileage": current mileage or null
+  },
+  "shop_info": {
+    "name": "repair shop name or null",
+    "address": "shop address or null",
+    "phone": "shop phone number or null",
+    "zip_code": "shop zip code or null"
   }`
   }
 
@@ -436,7 +486,8 @@ async function generateSummaryAndAdvice(
   feeAnalysis: any | null,
   doubleBillingCheck: any | null,
   priceComparison: any | null,
-  serviceNecessityChecks: any[]
+  serviceNecessityChecks: any[],
+  shopReputation: any | null
 ): Promise<{
   summary: string
   recommendations: Omit<Recommendation, 'id' | 'analysis_id' | 'created_at'>[]
@@ -461,6 +512,13 @@ async function generateSummaryAndAdvice(
     const unnecessaryServices = serviceNecessityChecks.filter(c => !c.isNecessary)
     if (unnecessaryServices.length > 0) {
       additionalContext += `\nUnnecessary Services Detected (${unnecessaryServices.length}): ${unnecessaryServices.map(s => s.service).join(', ')}.`
+    }
+  }
+
+  if (shopReputation) {
+    additionalContext += `\nShop Reputation: ${shopReputation.shopName} - Rating: ${shopReputation.rating || 'N/A'}/5 (${shopReputation.totalReviews} reviews), Trust Score: ${shopReputation.trustScore}/100.`
+    if (shopReputation.warnings.length > 0) {
+      additionalContext += ` Warnings: ${shopReputation.warnings.join(', ')}.`
     }
   }
 

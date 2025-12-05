@@ -152,7 +152,7 @@ export interface FeeAnalysis {
 }
 
 export function analyzeFees(
-  lineItems: Array<{ description: string; line_total?: number; amount?: number }>,
+  lineItems: Array<{ description: string; line_total?: number | null; amount?: number | null }>,
   totalCost: number
 ): FeeAnalysis {
   const feeKeywords = SUSPICIOUS_FEE_PATTERNS.map(p => p.toLowerCase())
@@ -207,7 +207,7 @@ export interface DoubleBillingCheck {
 }
 
 export function checkDoubleBilling(
-  lineItems: Array<{ description: string; quantity?: number; line_total?: number }>,
+  lineItems: Array<{ description: string; quantity?: number | null; line_total?: number | null }>,
 ): DoubleBillingCheck {
   const diagnosticItem = lineItems.find(item =>
     item.description.toLowerCase().includes('diagnostic')

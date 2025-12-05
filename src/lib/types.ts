@@ -89,6 +89,14 @@ export interface ExtractedFields {
   payment_terms: PaymentTerms | null
   auto_renewal: boolean | null
   cancellation_terms: string | null
+  vehicle_info?: VehicleInfo | null
+}
+
+export interface VehicleInfo {
+  year: number | null
+  make: string | null
+  model: string | null
+  mileage: number | null
 }
 
 export interface LineItem {
@@ -117,4 +125,35 @@ export interface AIAnalysisResult {
   risk_label: RiskLabel
   summary: string
   recommendations: Omit<Recommendation, 'id' | 'analysis_id' | 'created_at'>[]
+  fee_analysis?: FeeAnalysisResult | null
+  double_billing_check?: DoubleBillingResult | null
+  price_comparison?: PriceComparison | null
+}
+
+export interface FeeAnalysisResult {
+  totalFees: number
+  feePercentage: number
+  feeCount: number
+  industryStandardMin: number
+  industryStandardMax: number
+  isSuspicious: boolean
+  estimatedOvercharge: number
+  reasoning: string
+}
+
+export interface DoubleBillingResult {
+  hasDoubleBilling: boolean
+  diagnosticFee: number | null
+  laborHours: number | null
+  explanation: string
+  potentialSavings: number
+}
+
+export interface PriceComparison {
+  estimateTotal: number
+  fairPriceMin: number
+  fairPriceMax: number
+  isOverpriced: boolean
+  potentialOvercharge: number
+  confidence: 'HIGH' | 'MEDIUM' | 'LOW'
 }

@@ -12,7 +12,10 @@ import {
   VAGUE_CHARGE_PATTERNS,
   calculateRiskScore,
   getRiskLabel,
+  analyzeFees,
+  checkDoubleBilling,
 } from './config'
+import { comparePrices, checkServiceNecessity } from './priceComparison'
 
 // Lazy initialization to avoid build-time errors
 let openaiClient: OpenAI | null = null
@@ -47,23 +50,103 @@ export async function analyzeDocument(rawText: string): Promise<AIAnalysisResult
   const riskScore = calculateRiskScore(redFlags)
   const riskLabel = getRiskLabel(riskScore)
 
-  // Step 5: Generate summary and recommendations
+  // Step 5: Analyze fees (if line items exist)
+  let feeAnalysis = null
+  if (extractedFields.line_items && extractedFields.line_items.length > 0 && extractedFields.total_cost) {
+    const allItems = [...extractedFields.line_items, ...extractedFields.taxes_and_fees]
+    feeAnalysis = analyzeFees(allItems, extractedFields.total_cost)
+
+    // Add fee analysis flag if suspicious
+    if (feeAnalysis.isSuspicious) {
+      redFlags.push({
+        flag_type: 'HIDDEN_FEE',
+        severity: 'HIGH',
+        explanation: feeAnalysis.reasoning,
+        snippet: null,
+      })
+    }
+  }
+
+  // Step 6: Check for double-billing (if line items exist)
+  let doubleBillingCheck = null
+  if (extractedFields.line_items && extractedFields.line_items.length > 0) {
+    doubleBillingCheck = checkDoubleBilling(extractedFields.line_items)
+
+    // Add double-billing flag if detected
+    if (doubleBillingCheck.hasDoubleBilling) {
+      redFlags.push({
+        flag_type: 'HIDDEN_FEE',
+        severity: 'HIGH',
+        explanation: doubleBillingCheck.explanation,
+        snippet: null,
+      })
+    }
+  }
+
+  // Step 7: Price comparison (if applicable)
+  let priceComparison = null
+  try {
+    priceComparison = await comparePrices(extractedFields, documentType)
+
+    if (priceComparison && priceComparison.isOverpriced) {
+      redFlags.push({
+        flag_type: 'HIGH_TOTAL_COST',
+        severity: 'HIGH',
+        explanation: `This estimate ($${priceComparison.estimateTotal.toFixed(2)}) is ${priceComparison.confidence === 'HIGH' ? '' : 'potentially '}above fair market price ($${priceComparison.fairPriceMin.toFixed(2)}-$${priceComparison.fairPriceMax.toFixed(2)}). Potential overcharge: $${priceComparison.potentialOvercharge.toFixed(2)}.`,
+        snippet: null,
+      })
+    }
+  } catch (error) {
+    console.error('Price comparison failed:', error)
+  }
+
+  // Step 8: Service necessity check (if applicable)
+  let serviceNecessityChecks: any[] = []
+  try {
+    serviceNecessityChecks = await checkServiceNecessity(extractedFields, documentType)
+
+    for (const check of serviceNecessityChecks) {
+      if (!check.isNecessary && check.confidence !== 'LOW') {
+        redFlags.push({
+          flag_type: 'VAGUE_CHARGE',
+          severity: check.confidence === 'HIGH' ? 'HIGH' : 'MEDIUM',
+          explanation: `${check.service}: ${check.reasoning}`,
+          snippet: null,
+        })
+      }
+    }
+  } catch (error) {
+    console.error('Service necessity check failed:', error)
+  }
+
+  // Step 9: Recalculate risk score with all new flags
+  const finalRiskScore = calculateRiskScore(redFlags)
+  const finalRiskLabel = getRiskLabel(finalRiskScore)
+
+  // Step 10: Generate summary and recommendations
   const { summary, recommendations } = await generateSummaryAndAdvice(
     rawText,
     documentType,
     extractedFields,
     redFlags,
-    riskScore
+    finalRiskScore,
+    feeAnalysis,
+    doubleBillingCheck,
+    priceComparison,
+    serviceNecessityChecks
   )
 
   return {
     document_type: documentType,
     extracted_fields: extractedFields,
     red_flags: redFlags,
-    risk_score: riskScore,
-    risk_label: riskLabel,
+    risk_score: finalRiskScore,
+    risk_label: finalRiskLabel,
     summary,
     recommendations,
+    fee_analysis: feeAnalysis,
+    double_billing_check: doubleBillingCheck,
+    price_comparison: priceComparison,
   }
 }
 
@@ -114,6 +197,17 @@ async function extractFields(
   text: string,
   documentType: DocumentType
 ): Promise<ExtractedFields> {
+  let vehicleInfoPrompt = ''
+  if (documentType === 'ESTIMATE_AUTO') {
+    vehicleInfoPrompt = `,
+  "vehicle_info": {
+    "year": year of vehicle or null,
+    "make": manufacturer (e.g., Honda, Toyota) or null,
+    "model": model name or null,
+    "mileage": current mileage or null
+  }`
+  }
+
   const prompt = `Extract key information from this ${documentType} document. Return a JSON object with these fields:
 
 {
@@ -138,7 +232,7 @@ async function extractFields(
     "interest_rate": interest rate or null
   } or null,
   "auto_renewal": true/false/null,
-  "cancellation_terms": "cancellation policy text or null"
+  "cancellation_terms": "cancellation policy text or null"${vehicleInfoPrompt}
 }
 
 Document text:
@@ -338,21 +432,48 @@ async function generateSummaryAndAdvice(
   documentType: DocumentType,
   extractedFields: ExtractedFields,
   redFlags: Omit<RedFlag, 'id' | 'analysis_id' | 'created_at'>[],
-  riskScore: number
+  riskScore: number,
+  feeAnalysis: any | null,
+  doubleBillingCheck: any | null,
+  priceComparison: any | null,
+  serviceNecessityChecks: any[]
 ): Promise<{
   summary: string
   recommendations: Omit<Recommendation, 'id' | 'analysis_id' | 'created_at'>[]
 }> {
   const flagsSummary = redFlags.map(f => `- ${f.explanation}`).join('\n')
 
+  let additionalContext = ''
+
+  if (feeAnalysis && feeAnalysis.isSuspicious) {
+    additionalContext += `\nFee Analysis: ${feeAnalysis.reasoning} Estimated overcharge: $${feeAnalysis.estimatedOvercharge.toFixed(2)}.`
+  }
+
+  if (doubleBillingCheck && doubleBillingCheck.hasDoubleBilling) {
+    additionalContext += `\nDouble-Billing Detected: ${doubleBillingCheck.explanation} Potential savings: $${doubleBillingCheck.potentialSavings.toFixed(2)}.`
+  }
+
+  if (priceComparison && priceComparison.isOverpriced) {
+    additionalContext += `\nPrice Comparison: Estimate ($${priceComparison.estimateTotal.toFixed(2)}) is above fair market range ($${priceComparison.fairPriceMin.toFixed(2)}-$${priceComparison.fairPriceMax.toFixed(2)}). Potential overcharge: $${priceComparison.potentialOvercharge.toFixed(2)}.`
+  }
+
+  if (serviceNecessityChecks && serviceNecessityChecks.length > 0) {
+    const unnecessaryServices = serviceNecessityChecks.filter(c => !c.isNecessary)
+    if (unnecessaryServices.length > 0) {
+      additionalContext += `\nUnnecessary Services Detected (${unnecessaryServices.length}): ${unnecessaryServices.map(s => s.service).join(', ')}.`
+    }
+  }
+
   const prompt = `You are a consumer protection advisor. Based on the analysis below, provide:
 
-1. A plain-English SUMMARY (2-3 sentences) explaining what this document is and the key points consumers should know.
+1. A plain-English SUMMARY (2-3 sentences) explaining what this document is and the key points consumers should know. If fees are excessive or double-billing is detected, mention the potential overcharge amount.
 
 2. 3-5 RECOMMENDATIONS with:
    - title: Short action title
    - body: Explanation of what to do
    - script_example: A ready-to-say script the consumer can use (or null)
+
+IMPORTANT: If fee analysis shows overcharges or double-billing is detected, prioritize recommendations about challenging these specific issues.
 
 Document type: ${documentType}
 Risk score: ${riskScore}/100
@@ -360,6 +481,7 @@ Total cost: ${extractedFields.total_cost ? `$${extractedFields.total_cost}` : 'N
 
 Red flags found:
 ${flagsSummary || 'None'}
+${additionalContext}
 
 Return JSON:
 {

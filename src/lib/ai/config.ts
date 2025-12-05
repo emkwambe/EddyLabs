@@ -138,3 +138,116 @@ export function getRiskLabel(score: number): 'SAFE' | 'MILD_CONCERN' | 'HIGH_CON
   if (score <= 50) return 'MILD_CONCERN'
   return 'HIGH_CONCERN'
 }
+
+// Fee Analysis
+export interface FeeAnalysis {
+  totalFees: number
+  feePercentage: number
+  feeCount: number
+  industryStandardMin: number
+  industryStandardMax: number
+  isSuspicious: boolean
+  estimatedOvercharge: number
+  reasoning: string
+}
+
+export function analyzeFees(
+  lineItems: Array<{ description: string; line_total?: number; amount?: number }>,
+  totalCost: number
+): FeeAnalysis {
+  const feeKeywords = SUSPICIOUS_FEE_PATTERNS.map(p => p.toLowerCase())
+
+  // Find all fee line items
+  const fees = lineItems.filter(item => {
+    const desc = item.description.toLowerCase()
+    return feeKeywords.some(keyword => desc.includes(keyword))
+  })
+
+  const totalFees = fees.reduce((sum, fee) => {
+    return sum + (fee.line_total || fee.amount || 0)
+  }, 0)
+
+  const feePercentage = totalCost > 0 ? (totalFees / totalCost) * 100 : 0
+
+  // Industry standards: 3-5% as a single consolidated fee
+  const industryStandardMin = totalCost * 0.03
+  const industryStandardMax = totalCost * 0.05
+
+  const isSuspicious = feePercentage > 5 || fees.length > 1
+  const estimatedOvercharge = Math.max(0, totalFees - industryStandardMax)
+
+  let reasoning = ''
+  if (fees.length > 1) {
+    reasoning = `Found ${fees.length} separate fees totaling $${totalFees.toFixed(2)} (${feePercentage.toFixed(1)}%). Industry standard is a single consolidated fee at 3-5%. Splitting into multiple line items obscures the total impact.`
+  } else if (feePercentage > 5) {
+    reasoning = `Total fees are ${feePercentage.toFixed(1)}% of the estimate, exceeding the industry standard of 3-5%.`
+  } else if (totalFees > 0) {
+    reasoning = `Fees total $${totalFees.toFixed(2)} (${feePercentage.toFixed(1)}%), within industry standards.`
+  }
+
+  return {
+    totalFees,
+    feePercentage,
+    feeCount: fees.length,
+    industryStandardMin,
+    industryStandardMax,
+    isSuspicious,
+    estimatedOvercharge,
+    reasoning,
+  }
+}
+
+// Double-Billing Detection
+export interface DoubleBillingCheck {
+  hasDoubleBilling: boolean
+  diagnosticFee: number | null
+  laborHours: number | null
+  explanation: string
+  potentialSavings: number
+}
+
+export function checkDoubleBilling(
+  lineItems: Array<{ description: string; quantity?: number; line_total?: number }>,
+): DoubleBillingCheck {
+  const diagnosticItem = lineItems.find(item =>
+    item.description.toLowerCase().includes('diagnostic')
+  )
+
+  const laborItems = lineItems.filter(item => {
+    const desc = item.description.toLowerCase()
+    return desc.includes('labor') && !desc.includes('diagnostic')
+  })
+
+  if (!diagnosticItem || laborItems.length === 0) {
+    return {
+      hasDoubleBilling: false,
+      diagnosticFee: null,
+      laborHours: null,
+      explanation: '',
+      potentialSavings: 0,
+    }
+  }
+
+  const diagnosticFee = diagnosticItem.line_total || 0
+  const totalLaborHours = laborItems.reduce((sum, item) => sum + (item.quantity || 0), 0)
+
+  // Diagnostic typically takes 0.5-1.5 hours
+  // If there's both diagnostic fee AND labor, it's likely double-billing
+  const hasDoubleBilling = diagnosticFee > 0 && totalLaborHours > 0
+
+  let explanation = ''
+  let potentialSavings = 0
+
+  if (hasDoubleBilling) {
+    potentialSavings = diagnosticFee
+    explanation = `You're being charged $${diagnosticFee.toFixed(2)} for diagnostics PLUS ${totalLaborHours} hours of labor. Industry standard: diagnostic fee is waived when repairs are approved, OR it's included in labor hours. This appears to be double-billing for overlapping work.`
+  }
+
+  return {
+    hasDoubleBilling,
+    diagnosticFee,
+    laborHours: totalLaborHours,
+    explanation,
+    potentialSavings,
+  }
+}

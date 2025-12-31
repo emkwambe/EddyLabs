@@ -158,22 +158,37 @@ export default function StoryReaderPage() {
 
     // Update sight word exposures
     for (const word of story.sight_words) {
-      await supabase.rpc('increment_sight_word_exposure', {
-        p_child_id: childId,
-        p_word: word.toLowerCase(),
-      }).catch(() => {
-        // If RPC doesn't exist, do upsert
-        supabase
+      const normalizedWord = word.toLowerCase()
+
+      // Check if exposure exists
+      const { data: existing } = await supabase
+        .from('sight_word_exposures')
+        .select('id, exposure_count')
+        .eq('child_profile_id', childId)
+        .eq('word', normalizedWord)
+        .single()
+
+      if (existing) {
+        // Update existing exposure
+        await supabase
           .from('sight_word_exposures')
-          .upsert({
-            child_profile_id: childId,
-            word: word.toLowerCase(),
-            exposure_count: 1,
+          .update({
+            exposure_count: existing.exposure_count + 1,
             last_seen_at: new Date().toISOString(),
-          }, {
-            onConflict: 'child_profile_id,word',
           })
-      })
+          .eq('id', existing.id)
+      } else {
+        // Create new exposure
+        await supabase
+          .from('sight_word_exposures')
+          .insert({
+            child_profile_id: childId,
+            word: normalizedWord,
+            exposure_count: 1,
+            first_seen_at: new Date().toISOString(),
+            last_seen_at: new Date().toISOString(),
+          })
+      }
     }
 
     // End reading session

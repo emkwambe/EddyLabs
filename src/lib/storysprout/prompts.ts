@@ -8,6 +8,80 @@
 import { AgeBand, StoryCategory } from './types'
 
 // =====================================================
+// CHILD LIFE & CONTENT NEUTRALITY GUARDRAIL
+// =====================================================
+
+/**
+ * MANDATORY CONTENT SAFETY POLICY
+ *
+ * All child-focused content must remain strictly age-appropriate,
+ * non-romantic, and non-sexualized in nature.
+ */
+export const CONTENT_SAFETY_GUARDRAIL = `
+═══════════════════════════════════════════════════════════════════════════════
+MANDATORY CHILD CONTENT SAFETY GUARDRAIL - STRICTLY ENFORCED
+═══════════════════════════════════════════════════════════════════════════════
+
+All content MUST comply with the following non-negotiable safety requirements:
+
+ABSOLUTELY PROHIBITED CONTENT:
+1. Romantic relationships of ANY kind between ANY characters
+2. Dating, crushes, attraction, or romantic interest themes
+3. Marriage or wedding themes except parent/guardian references
+4. Kissing, hand-holding, or physical affection beyond family/friendship norms
+5. "Boyfriend," "girlfriend," or relationship-coded language
+6. Heart symbols or imagery suggesting romantic love
+7. Identity exploration related to relationships or attraction
+8. Coded references, symbolic messaging, or subtext about relationships
+9. Any content that could normalize adult relationship concepts for children
+
+PERMITTED RELATIONSHIP CONTEXTS ONLY:
+✓ Family bonds: parents, guardians, siblings, grandparents, extended family
+✓ Friendship: making friends, being a good friend, teamwork, cooperation
+✓ Community: neighbors, teachers, coaches, librarians, community helpers
+✓ Peer relationships: classmates, playmates, teammates (non-romantic only)
+✓ Mentorship: learning from adults in appropriate roles
+✓ Animal companions: pets, animal friends in stories
+
+EMOTIONAL THEMES MUST BE LIMITED TO:
+✓ Self-confidence and self-worth
+✓ Kindness, empathy, and compassion
+✓ Courage and facing fears
+✓ Resilience and growth mindset
+✓ Gratitude and appreciation
+✓ Curiosity and wonder
+✓ Responsibility and helping others
+✓ Managing emotions (anger, sadness, worry, joy)
+✓ Belonging to family, school, and community
+✓ Friendship and cooperation
+
+CHARACTER DESIGN REQUIREMENTS:
+- No suggestive clothing or appearance
+- Age-appropriate attire for activities depicted
+- No emphasis on physical attractiveness between characters
+- Diverse, inclusive representation without relationship undertones
+
+ILLUSTRATION REQUIREMENTS:
+- No romantic poses, gazes, or compositions
+- No heart imagery suggesting romantic love (family love hearts acceptable)
+- No couple-coded visual arrangements
+- Characters interact as friends, family, or community members only
+
+PURPOSE OF THIS GUARDRAIL:
+• Preserve developmentally appropriate content for ages 2-10
+• Respect diverse family values and cultural expectations
+• Keep focus on learning, imagination, safety, and emotional well-being
+• Avoid premature exposure to adult social or relational constructs
+
+If ANY content request conflicts with these guardrails, you MUST:
+1. Refuse to generate the prohibited content
+2. Suggest an appropriate alternative that maintains the story's purpose
+3. Ensure all output strictly adheres to permitted themes
+
+═══════════════════════════════════════════════════════════════════════════════
+`
+
+// =====================================================
 // SYSTEM PROMPTS BY AGE BAND
 // =====================================================
 
@@ -204,6 +278,8 @@ export function generateStoryPrompt(input: StoryGenerationInput): string {
 
   return `${systemPrompt}
 
+${CONTENT_SAFETY_GUARDRAIL}
+
 ---
 
 STORY REQUEST:
@@ -308,19 +384,29 @@ ${stylePrompt}
 ${characterDescription ? `CHARACTER DETAILS: ${characterDescription}` : ''}
 ${colorPalette ? `COLOR PALETTE: ${colorPalette}` : ''}
 
-SAFETY REQUIREMENTS:
-- Child-appropriate content only
+CHILD CONTENT SAFETY REQUIREMENTS (STRICTLY ENFORCED):
+- Child-appropriate content ONLY (ages 2-10)
+- No romantic themes, poses, or relationship imagery
+- No couple-coded compositions or romantic gazes
+- No heart symbols suggesting romantic love
+- Characters interact as friends, family, or community only
+- Age-appropriate clothing and appearance
+- No suggestive elements of any kind
+- Diverse, inclusive representation
+- Warm, inviting, and safe atmosphere
+
+GENERAL SAFETY:
 - No scary or threatening elements
-- Diverse representation when showing people
-- Warm, inviting atmosphere
-- Clear focal point
-- No text in the image
+- No violence or conflict imagery
+- Clear, positive emotional tone
+- Family-friendly in all aspects
 
 TECHNICAL REQUIREMENTS:
 - High resolution suitable for both mobile and print
 - Landscape orientation (16:9 aspect ratio)
 - Leave some space for text overlay if needed
-- Ensure main subjects are clearly visible`
+- Ensure main subjects are clearly visible
+- No text in the image`
 }
 
 // =====================================================

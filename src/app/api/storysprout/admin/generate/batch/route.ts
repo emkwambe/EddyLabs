@@ -1,5 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
+import {
+  validateStoryRequest,
+  suggestSafeTheme,
+} from '@/lib/storysprout/content-safety'
 
 // POST /api/storysprout/admin/generate/batch - Queue multiple stories at once
 export async function POST(request: NextRequest) {
@@ -16,7 +20,56 @@ export async function POST(request: NextRequest) {
 
     // Option 1: Generate from a list of story configs
     if (stories && Array.isArray(stories)) {
-      const queueEntries = stories.map((story: any, index: number) => ({
+      // ========================================
+      // CONTENT SAFETY VALIDATION FOR BATCH
+      // ========================================
+      const rejectedStories: Array<{
+        index: number
+        theme: string
+        violations: string[]
+        suggestions: string[]
+      }> = []
+
+      const validStories: any[] = []
+
+      for (let i = 0; i < stories.length; i++) {
+        const story = stories[i]
+
+        // Validate each story against content safety guardrails
+        const validation = validateStoryRequest({
+          theme: story.theme,
+          emotionalFocus: story.emotional_focus,
+          characterDescription: story.character_description,
+          setting: story.setting,
+        })
+
+        if (validation.violations.length > 0) {
+          rejectedStories.push({
+            index: i,
+            theme: story.theme,
+            violations: validation.violations,
+            suggestions: suggestSafeTheme(story.theme),
+          })
+        } else {
+          validStories.push(story)
+        }
+      }
+
+      // If any stories violate guardrails, reject the entire batch
+      if (rejectedStories.length > 0) {
+        return NextResponse.json(
+          {
+            error: 'Some stories violate child safety guardrails',
+            rejected_count: rejectedStories.length,
+            rejected_stories: rejectedStories,
+            message: 'Please revise rejected stories to comply with age-appropriate content guidelines. All stories must be non-romantic and focused on friendship, family, learning, and emotional growth.',
+          },
+          { status: 400 }
+        )
+      }
+
+      // All stories validated - create queue entries
+      const queueEntries = validStories.map((story: any, index: number) => ({
         category: story.category,
         age_band: story.age_band,
         theme: story.theme,
@@ -63,9 +116,10 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ error: 'Template not found' }, { status: 404 })
       }
 
-      // Generate variations
+      // Generate variations with content safety validation
       const queueEntries = []
       const characters = template.character_options || []
+      const rejectedVariations: Array<{ index: number; theme: string; violations: string[] }> = []
 
       for (let i = 0; i < count; i++) {
         const theme = theme_variations[i] || template.theme_template.replace(
@@ -86,20 +140,48 @@ export async function POST(request: NextRequest) {
 
         const character = characters[i % characters.length] || {}
 
-        queueEntries.push({
-          category: template.category,
-          age_band: template.age_band,
+        // Validate each generated theme variation
+        const validation = validateStoryRequest({
           theme,
-          emotional_focus: template.emotional_focus,
-          sight_words: template.sight_words,
-          page_count: template.page_count,
-          character_name: character.name,
-          character_description: character.description,
-          illustration_style: template.illustration_style,
-          color_palette: template.color_palette,
-          priority: 5 + i,
-          created_by: user.id,
+          emotionalFocus: template.emotional_focus,
+          characterDescription: character.description,
         })
+
+        if (validation.violations.length > 0) {
+          rejectedVariations.push({
+            index: i,
+            theme,
+            violations: validation.violations,
+          })
+        } else {
+          queueEntries.push({
+            category: template.category,
+            age_band: template.age_band,
+            theme,
+            emotional_focus: template.emotional_focus,
+            sight_words: template.sight_words,
+            page_count: template.page_count,
+            character_name: character.name,
+            character_description: character.description,
+            illustration_style: template.illustration_style,
+            color_palette: template.color_palette,
+            priority: 5 + i,
+            created_by: user.id,
+          })
+        }
+      }
+
+      // Reject if any variations failed validation
+      if (rejectedVariations.length > 0) {
+        return NextResponse.json(
+          {
+            error: 'Some template variations violate child safety guardrails',
+            rejected_count: rejectedVariations.length,
+            rejected_variations: rejectedVariations,
+            message: 'Template or theme variations contain prohibited content. Please review the template settings.',
+          },
+          { status: 400 }
+        )
       }
 
       const { data, error } = await supabase

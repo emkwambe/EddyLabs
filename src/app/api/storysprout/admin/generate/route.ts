@@ -1,5 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
+import {
+  validateStoryRequest,
+  validateEmotionalFocus,
+  suggestSafeTheme,
+  createReviewLog,
+} from '@/lib/storysprout/content-safety'
 
 // POST /api/storysprout/admin/generate - Queue a new story for generation
 export async function POST(request: NextRequest) {
@@ -35,6 +41,64 @@ export async function POST(request: NextRequest) {
         { status: 400 }
       )
     }
+
+    // ========================================
+    // CONTENT SAFETY VALIDATION
+    // ========================================
+
+    // Validate the story request against content safety guardrails
+    const contentValidation = validateStoryRequest({
+      theme,
+      emotionalFocus: emotional_focus,
+      characterDescription: character_description,
+      setting,
+    })
+
+    // Also validate emotional focus specifically
+    const emotionValidation = validateEmotionalFocus(emotional_focus)
+
+    // Combine violations
+    const allViolations = [
+      ...contentValidation.violations,
+      ...emotionValidation.violations,
+    ]
+
+    // If content violates guardrails, reject with helpful suggestions
+    if (allViolations.length > 0) {
+      const safeSuggestions = suggestSafeTheme(theme)
+
+      // Create audit log
+      const reviewLog = createReviewLog('story_generation', theme, contentValidation)
+      console.log('Content rejected:', JSON.stringify(reviewLog))
+
+      return NextResponse.json(
+        {
+          error: 'Content violates child safety guardrails',
+          violations: allViolations,
+          suggestions: safeSuggestions,
+          message: 'Please revise your request to comply with age-appropriate content guidelines. All stories must be non-romantic and focused on friendship, family, learning, and emotional growth.',
+        },
+        { status: 400 }
+      )
+    }
+
+    // Log warnings for manual review if any
+    const allWarnings = [
+      ...contentValidation.warnings,
+      ...emotionValidation.warnings,
+    ]
+
+    if (allWarnings.length > 0) {
+      console.log('Content warnings (approved with review flag):', {
+        theme,
+        warnings: allWarnings,
+        user_id: user.id,
+      })
+    }
+
+    // ========================================
+    // CREATE QUEUE ENTRY
+    // ========================================
 
     // Create queue entry
     const { data, error } = await supabase

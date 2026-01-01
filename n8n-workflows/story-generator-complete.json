@@ -1,0 +1,534 @@
+{
+  "name": "StorySprout - Complete Story Generator",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "generate-story",
+        "options": {}
+      },
+      "id": "webhook-trigger",
+      "name": "Webhook - Story Request",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [240, 300]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO story_generation_queue (category, age_band, theme, emotional_focus, sight_words, page_count, character_name, status, started_at) VALUES ('{{ $json.category }}', '{{ $json.age_band }}', '{{ $json.theme }}', ARRAY[{{ $json.emotional_focus.map(e => \"'\" + e + \"'\").join(',') }}], ARRAY[{{ $json.sight_words.map(w => \"'\" + w + \"'\").join(',') }}], {{ $json.page_count || 8 }}, '{{ $json.character_name }}', 'generating_text', NOW()) RETURNING *"
+      },
+      "id": "supabase-create-queue",
+      "name": "Supabase - Create Queue Entry",
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [460, 300],
+      "credentials": {
+        "supabaseApi": {
+          "id": "YOUR_SUPABASE_CREDENTIAL_ID",
+          "name": "Supabase"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "resource": "chat",
+        "model": "claude-3-5-sonnet-20241022",
+        "messages": {
+          "values": [
+            {
+              "role": "system",
+              "content": "You are a children's book author specializing in early literacy for StorySprout. Create engaging, age-appropriate stories.\n\nOUTPUT FORMAT (strict JSON):\n{\n  \"title\": \"Story Title\",\n  \"subtitle\": \"A short tagline\",\n  \"pages\": [\n    {\n      \"page_number\": 1,\n      \"text\": \"The story text for this page\",\n      \"illustration_description\": \"Detailed visual description for AI image generation. Include character poses, expressions, setting, colors, mood.\",\n      \"sight_words_used\": [\"the\", \"is\"]\n    }\n  ],\n  \"themes\": [\"theme1\", \"theme2\"],\n  \"curriculum_alignment\": [\"skill1\", \"skill2\"],\n  \"learning_objectives\": [\"objective1\", \"objective2\"]\n}"
+            },
+            {
+              "role": "user",
+              "content": "Create a {{ $json.age_band }} level story ({{ $json.page_count }} pages) for the {{ $json.category }} category.\n\nTHEME: {{ $json.theme }}\nEMOTIONAL FOCUS: {{ $json.emotional_focus.join(', ') }}\nSIGHT WORDS TO INCLUDE: {{ $json.sight_words.join(', ') }}\nMAIN CHARACTER: {{ $json.character_name }}\n\nWRITING GUIDELINES FOR {{ $json.age_band }}:\n{{ $json.age_band === 'pre_k' ? '- One simple sentence per page\\n- Maximum 5-7 words per sentence\\n- Heavy repetition\\n- Focus on concrete nouns and simple verbs' : '' }}\n{{ $json.age_band === 'k_prep' ? '- 1-2 simple sentences per page\\n- 8-12 words per sentence\\n- Moderate repetition\\n- Introduce basic descriptive words' : '' }}\n{{ $json.age_band === 'grade_1' ? '- 2-3 sentences per page\\n- Short paragraphs\\n- Less repetition, more variety\\n- Include dialogue' : '' }}\n{{ $json.age_band === 'grade_2' ? '- Short paragraphs\\n- More complex sentences\\n- Character development\\n- Cause and effect relationships' : '' }}"
+            }
+          ]
+        },
+        "options": {
+          "temperature": 0.7,
+          "maxTokens": 4000
+        }
+      },
+      "id": "claude-generate-story",
+      "name": "Claude - Generate Story",
+      "type": "@n8n/n8n-nodes-langchain.lmChatAnthropic",
+      "typeVersion": 1,
+      "position": [680, 300],
+      "credentials": {
+        "anthropicApi": {
+          "id": "YOUR_ANTHROPIC_CREDENTIAL_ID",
+          "name": "Anthropic"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Parse the Claude response into structured data\nconst response = $input.first().json;\nlet storyData;\n\ntry {\n  // Extract JSON from the response\n  const content = response.message?.content || response.text || response;\n  const jsonMatch = content.match(/\\{[\\s\\S]*\\}/);\n  if (jsonMatch) {\n    storyData = JSON.parse(jsonMatch[0]);\n  } else {\n    throw new Error('No JSON found in response');\n  }\n} catch (e) {\n  throw new Error('Failed to parse story: ' + e.message);\n}\n\n// Get queue data from previous node\nconst queueData = $('Supabase - Create Queue Entry').first().json;\n\nreturn {\n  json: {\n    queue_id: queueData.id,\n    ...storyData,\n    category: queueData.category,\n    age_band: queueData.age_band,\n    sight_words: queueData.sight_words,\n    page_count: storyData.pages.length\n  }\n};"
+      },
+      "id": "parse-story",
+      "name": "Parse Story Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [900, 300]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO stories (story_code, title, subtitle, age_band, min_age, max_age, reading_level_system, reading_level, category, themes, emotional_focus, sight_words, vocabulary_tier, estimated_read_time_minutes, page_count, modes_supported, illustration_style, curriculum_alignment, learning_objectives) VALUES ('SS-GEN-' || to_char(NOW(), 'YYYYMMDDHH24MISS'), '{{ $json.title }}', '{{ $json.subtitle }}', '{{ $json.age_band }}', CASE WHEN '{{ $json.age_band }}' = 'pre_k' THEN 2 WHEN '{{ $json.age_band }}' = 'k_prep' THEN 4 WHEN '{{ $json.age_band }}' = 'grade_1' THEN 6 WHEN '{{ $json.age_band }}' = 'grade_2' THEN 7 ELSE 8 END, CASE WHEN '{{ $json.age_band }}' = 'pre_k' THEN 3 WHEN '{{ $json.age_band }}' = 'k_prep' THEN 5 WHEN '{{ $json.age_band }}' = 'grade_1' THEN 7 WHEN '{{ $json.age_band }}' = 'grade_2' THEN 8 ELSE 10 END, 'guided', 'A', '{{ $json.category }}', ARRAY[{{ $json.themes.map(t => \"'\" + t + \"'\").join(',') }}], ARRAY[{{ $json.emotional_focus ? $json.emotional_focus.map(e => \"'\" + e + \"'\").join(',') : \"'joy'\" }}], ARRAY[{{ $json.sight_words.map(w => \"'\" + w + \"'\").join(',') }}], 1, {{ Math.ceil($json.page_count * 0.5) }}, {{ $json.page_count }}, ARRAY['read_to_me', 'read_with_me', 'read_alone']::reading_mode[], 'soft_flat', ARRAY[{{ $json.curriculum_alignment.map(c => \"'\" + c + \"'\").join(',') }}], ARRAY[{{ $json.learning_objectives.map(l => \"'\" + l + \"'\").join(',') }}]) RETURNING *"
+      },
+      "id": "supabase-create-story",
+      "name": "Supabase - Create Story",
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [1120, 300],
+      "credentials": {
+        "supabaseApi": {
+          "id": "YOUR_SUPABASE_CREDENTIAL_ID",
+          "name": "Supabase"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "UPDATE story_generation_queue SET story_id = '{{ $json.id }}', status = 'generating_images', current_step = 'Creating story pages' WHERE id = '{{ $('Parse Story Response').first().json.queue_id }}'"
+      },
+      "id": "supabase-update-queue-1",
+      "name": "Supabase - Update Queue Status",
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [1340, 300],
+      "credentials": {
+        "supabaseApi": {
+          "id": "YOUR_SUPABASE_CREDENTIAL_ID",
+          "name": "Supabase"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Prepare pages for loop processing\nconst storyData = $('Parse Story Response').first().json;\nconst story = $('Supabase - Create Story').first().json;\n\nreturn storyData.pages.map(page => ({\n  json: {\n    story_id: story.id,\n    queue_id: storyData.queue_id,\n    page_number: page.page_number,\n    text_content: page.text,\n    illustration_description: page.illustration_description,\n    illustration_alt_text: page.illustration_description.substring(0, 200),\n    sight_words_used: page.sight_words_used || [],\n    age_band: storyData.age_band,\n    character_name: $('Supabase - Create Queue Entry').first().json.character_name\n  }\n}));"
+      },
+      "id": "prepare-pages",
+      "name": "Prepare Pages for Loop",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1560, 300]
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "id": "loop-pages",
+      "name": "Loop Over Pages",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [1780, 300]
+    },
+    {
+      "parameters": {
+        "resource": "image",
+        "operation": "generate",
+        "model": "dall-e-3",
+        "prompt": "=Children's book illustration, soft watercolor style, warm pastel colors, simple clean background, child-friendly and safe:\n\n{{ $json.illustration_description }}\n\nStyle requirements:\n- Soft, rounded shapes\n- Warm, inviting colors (soft pinks, yellows, greens, blues)\n- Simple background with minimal detail\n- Characters should look friendly and approachable\n- No text or words in the image\n- Age-appropriate for {{ $json.age_band }} children\n{{ $json.character_name ? '- Character: ' + $json.character_name + ' should be consistent and recognizable' : '' }}",
+        "options": {
+          "size": "1024x1024",
+          "quality": "standard",
+          "style": "natural"
+        }
+      },
+      "id": "dalle-generate",
+      "name": "DALL-E - Generate Illustration",
+      "type": "n8n-nodes-base.openAi",
+      "typeVersion": 1,
+      "position": [2000, 300],
+      "credentials": {
+        "openAiApi": {
+          "id": "YOUR_OPENAI_CREDENTIAL_ID",
+          "name": "OpenAI"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "url": "={{ $json.data[0].url }}",
+        "options": {
+          "response": {
+            "response": {
+              "responseFormat": "file"
+            }
+          }
+        }
+      },
+      "id": "download-image",
+      "name": "Download Image",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [2220, 300]
+    },
+    {
+      "parameters": {
+        "operation": "upload",
+        "bucketName": "story-images",
+        "fileName": "=pages/{{ $('Loop Over Pages').first().json.story_id }}/page-{{ $('Loop Over Pages').first().json.page_number }}.png",
+        "options": {
+          "upsert": true
+        }
+      },
+      "id": "supabase-upload",
+      "name": "Supabase - Upload to Storage",
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [2440, 300],
+      "credentials": {
+        "supabaseApi": {
+          "id": "YOUR_SUPABASE_CREDENTIAL_ID",
+          "name": "Supabase"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Build the public URL for the uploaded image\nconst pageData = $('Loop Over Pages').first().json;\nconst supabaseUrl = 'YOUR_SUPABASE_URL'; // Replace with your Supabase URL\nconst imagePath = `pages/${pageData.story_id}/page-${pageData.page_number}.png`;\nconst publicUrl = `${supabaseUrl}/storage/v1/object/public/story-images/${imagePath}`;\n\nreturn {\n  json: {\n    ...pageData,\n    illustration_url: publicUrl\n  }\n};"
+      },
+      "id": "build-image-url",
+      "name": "Build Image URL",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [2660, 300]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO story_pages (story_id, page_number, text_content, illustration_url, illustration_alt_text, sight_word_positions) VALUES ('{{ $json.story_id }}', {{ $json.page_number }}, '{{ $json.text_content.replace(/'/g, \"''\") }}', '{{ $json.illustration_url }}', '{{ $json.illustration_alt_text.replace(/'/g, \"''\") }}', '[]'::jsonb) RETURNING *"
+      },
+      "id": "supabase-create-page",
+      "name": "Supabase - Create Page",
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [2880, 300],
+      "credentials": {
+        "supabaseApi": {
+          "id": "YOUR_SUPABASE_CREDENTIAL_ID",
+          "name": "Supabase"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "UPDATE story_generation_queue SET pages_completed = pages_completed + 1, current_step = 'Generated page {{ $json.page_number }}' WHERE id = '{{ $('Loop Over Pages').first().json.queue_id }}'"
+      },
+      "id": "supabase-update-progress",
+      "name": "Supabase - Update Progress",
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [3100, 300],
+      "credentials": {
+        "supabaseApi": {
+          "id": "YOUR_SUPABASE_CREDENTIAL_ID",
+          "name": "Supabase"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "time": 2,
+        "unit": "seconds"
+      },
+      "id": "wait-rate-limit",
+      "name": "Wait (Rate Limit)",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1,
+      "position": [3320, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            {
+              "value1": "={{ $('Loop Over Pages').first().context.noItemsLeft }}",
+              "value2": true
+            }
+          ]
+        }
+      },
+      "id": "check-loop-done",
+      "name": "Check If Loop Done",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [3540, 300]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "UPDATE story_generation_queue SET status = 'complete', completed_at = NOW(), current_step = 'All pages generated' WHERE id = '{{ $('Parse Story Response').first().json.queue_id }}'"
+      },
+      "id": "supabase-complete",
+      "name": "Supabase - Mark Complete",
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [3760, 200],
+      "credentials": {
+        "supabaseApi": {
+          "id": "YOUR_SUPABASE_CREDENTIAL_ID",
+          "name": "Supabase"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "values": {
+          "string": [
+            {
+              "name": "status",
+              "value": "success"
+            },
+            {
+              "name": "message",
+              "value": "Story generation complete!"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "success-response",
+      "name": "Success Response",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3,
+      "position": [3980, 200]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ success: true, message: 'Story generated successfully', story_id: $('Supabase - Create Story').first().json.id }) }}"
+      },
+      "id": "webhook-response",
+      "name": "Respond to Webhook",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [4200, 200]
+    }
+  ],
+  "connections": {
+    "Webhook - Story Request": {
+      "main": [
+        [
+          {
+            "node": "Supabase - Create Queue Entry",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Supabase - Create Queue Entry": {
+      "main": [
+        [
+          {
+            "node": "Claude - Generate Story",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Claude - Generate Story": {
+      "main": [
+        [
+          {
+            "node": "Parse Story Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Story Response": {
+      "main": [
+        [
+          {
+            "node": "Supabase - Create Story",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Supabase - Create Story": {
+      "main": [
+        [
+          {
+            "node": "Supabase - Update Queue Status",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Supabase - Update Queue Status": {
+      "main": [
+        [
+          {
+            "node": "Prepare Pages for Loop",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Pages for Loop": {
+      "main": [
+        [
+          {
+            "node": "Loop Over Pages",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Loop Over Pages": {
+      "main": [
+        [
+          {
+            "node": "DALL-E - Generate Illustration",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "DALL-E - Generate Illustration": {
+      "main": [
+        [
+          {
+            "node": "Download Image",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Download Image": {
+      "main": [
+        [
+          {
+            "node": "Supabase - Upload to Storage",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Supabase - Upload to Storage": {
+      "main": [
+        [
+          {
+            "node": "Build Image URL",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Image URL": {
+      "main": [
+        [
+          {
+            "node": "Supabase - Create Page",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Supabase - Create Page": {
+      "main": [
+        [
+          {
+            "node": "Supabase - Update Progress",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Supabase - Update Progress": {
+      "main": [
+        [
+          {
+            "node": "Wait (Rate Limit)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Wait (Rate Limit)": {
+      "main": [
+        [
+          {
+            "node": "Check If Loop Done",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check If Loop Done": {
+      "main": [
+        [
+          {
+            "node": "Supabase - Mark Complete",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Loop Over Pages",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Supabase - Mark Complete": {
+      "main": [
+        [
+          {
+            "node": "Success Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Success Response": {
+      "main": [
+        [
+          {
+            "node": "Respond to Webhook",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "tags": [
+    {
+      "name": "StorySprout"
+    },
+    {
+      "name": "Content Generation"
+    }
+  ]
+}

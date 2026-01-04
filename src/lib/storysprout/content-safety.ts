@@ -1,10 +1,19 @@
 /**
  * StorySprout Content Safety Validation
  *
- * Enforces Child Life & Content Neutrality Guardrails
- * All child-focused content must remain strictly age-appropriate,
- * non-romantic, and non-sexualized in nature.
+ * Enforces Age-Appropriate Content Guardrails for all grade levels (Pre-K to Grade 12)
+ * Content restrictions are tiered by school level:
+ * - Elementary & Younger (Pre-K to Grade 5): Strict content neutrality
+ * - Middle School (Grades 6-8): Age-appropriate themes with guidance
+ * - High School (Grades 9-12): Mature themes handled appropriately
  */
+
+import { AgeBand, SchoolLevel, AGE_BANDS } from './types'
+
+// Helper to get school level
+function getSchoolLevel(ageBand: AgeBand): SchoolLevel {
+  return AGE_BANDS[ageBand].schoolLevel
+}
 
 // =====================================================
 // PROHIBITED CONTENT PATTERNS
@@ -224,6 +233,151 @@ export const PERMITTED_THEMES = [
   'celebrations',
   'traditions',
 ]
+
+// =====================================================
+// AGE-TIERED CONTENT CONFIGURATION
+// =====================================================
+
+/**
+ * Middle School permitted themes (in addition to elementary)
+ */
+export const MIDDLE_SCHOOL_PERMITTED_THEMES = [
+  ...PERMITTED_THEMES,
+  // Identity and growth themes
+  'self-discovery',
+  'identity formation',
+  'finding your voice',
+  'peer pressure',
+  'academic challenges',
+  // Social themes
+  'social dynamics',
+  'navigating friendships',
+  'dealing with conflict',
+  'standing up for others',
+  // Broader themes
+  'social justice basics',
+  'historical events',
+  'cultural identity',
+  'global awareness',
+  'environmental activism',
+  // Age-appropriate relationship awareness
+  'friendship changes',
+  'feeling nervous around peers',
+]
+
+/**
+ * High School permitted themes (in addition to middle school)
+ */
+export const HIGH_SCHOOL_PERMITTED_THEMES = [
+  ...MIDDLE_SCHOOL_PERMITTED_THEMES,
+  // Deeper identity themes
+  'coming of age',
+  'life transitions',
+  'career exploration',
+  'future planning',
+  'independence',
+  // Social and political themes
+  'social movements',
+  'civic engagement',
+  'political awareness',
+  'economic concepts',
+  'ethical dilemmas',
+  // Age-appropriate relationship themes
+  'healthy relationships',
+  'dating awareness',
+  'peer relationships',
+  // Complex themes handled appropriately
+  'mental health awareness',
+  'grief and loss',
+  'family challenges',
+  'discrimination',
+  'inequality',
+]
+
+/**
+ * Terms that are prohibited only for elementary and younger
+ * (May be permitted with appropriate handling for older students)
+ */
+export const ELEMENTARY_ONLY_PROHIBITED = [
+  // These are always prohibited for elementary but may be handled
+  // appropriately for older students
+  'dating',
+  'crush',
+  'attracted to',
+  'attraction',
+]
+
+/**
+ * Terms that remain prohibited regardless of age
+ * (Content that is never appropriate for K-12 education)
+ */
+export const UNIVERSALLY_PROHIBITED = [
+  // Sexualized content
+  'sexy',
+  'seductive',
+  'sensual',
+  'intimate',
+  'intimacy',
+  'naked',
+  'nude',
+  'undress',
+  'strip',
+  // Violence
+  'gore',
+  'brutal',
+  'torture',
+  // Substance abuse promotion
+  'drugs are cool',
+  'get drunk',
+  'get high',
+  // Hate speech patterns
+  'hate all',
+  'kill all',
+  'destroy all',
+]
+
+/**
+ * Get prohibited terms based on age band
+ */
+export function getProhibitedTermsForAge(ageBand: AgeBand): string[] {
+  const schoolLevel = getSchoolLevel(ageBand)
+
+  switch (schoolLevel) {
+    case 'early_childhood':
+    case 'elementary':
+      // Most restrictive - use all prohibited terms
+      return PROHIBITED_TERMS
+
+    case 'middle_school':
+      // Remove some terms but keep core restrictions
+      return PROHIBITED_TERMS.filter(
+        term => !['crush', 'attraction'].includes(term.toLowerCase())
+      )
+
+    case 'high_school':
+      // Most permissive but still filtered
+      return UNIVERSALLY_PROHIBITED
+  }
+}
+
+/**
+ * Get permitted themes based on age band
+ */
+export function getPermittedThemesForAge(ageBand: AgeBand): string[] {
+  const schoolLevel = getSchoolLevel(ageBand)
+
+  switch (schoolLevel) {
+    case 'early_childhood':
+    case 'elementary':
+      return PERMITTED_THEMES
+
+    case 'middle_school':
+      return MIDDLE_SCHOOL_PERMITTED_THEMES
+
+    case 'high_school':
+      return HIGH_SCHOOL_PERMITTED_THEMES
+  }
+}
 
 // =====================================================
 // VALIDATION FUNCTIONS
@@ -609,5 +763,465 @@ export function createReviewLog(
     input: input.substring(0, 500), // Truncate for logging
     result,
     action,
+  }
+}
+
+// =====================================================
+// AGE-AWARE VALIDATION FUNCTIONS
+// =====================================================
+
+/**
+ * Age-aware text content validation
+ * Applies different rules based on target age group
+ */
+export function validateTextContentForAge(
+  text: string,
+  ageBand: AgeBand
+): ContentValidationResult {
+  const result: ContentValidationResult = {
+    isValid: true,
+    violations: [],
+    warnings: [],
+    suggestions: [],
+  }
+
+  const lowerText = text.toLowerCase()
+  const prohibitedTerms = getProhibitedTermsForAge(ageBand)
+  const schoolLevel = getSchoolLevel(ageBand)
+
+  // Check for prohibited terms based on age
+  for (const term of prohibitedTerms) {
+    if (lowerText.includes(term.toLowerCase())) {
+      result.isValid = false
+      result.violations.push(`Prohibited term for ${schoolLevel}: "${term}"`)
+    }
+  }
+
+  // Universal checks (apply to all ages)
+  for (const term of UNIVERSALLY_PROHIBITED) {
+    if (lowerText.includes(term.toLowerCase())) {
+      result.isValid = false
+      result.violations.push(`Universally prohibited: "${term}"`)
+    }
+  }
+
+  // Age-specific warnings
+  if (schoolLevel === 'early_childhood' || schoolLevel === 'elementary') {
+    // Strict checks for younger readers
+    if (/\bbeautiful\b|\bhandsome\b|\bpretty\b|\bcute\b/i.test(text)) {
+      result.warnings.push('Appearance-focused language - ensure not emphasizing physical attraction')
+    }
+    if (/\bheart\b.*\b(flutter|skip|race|pound)/i.test(text)) {
+      result.warnings.push('Heart-related emotional language - ensure context is family/friendship')
+    }
+  } else if (schoolLevel === 'middle_school') {
+    // Moderate checks for middle schoolers
+    if (/\bkiss\b|\bkissing\b/i.test(text) && !/family|cheek|forehead|goodbye/i.test(text)) {
+      result.warnings.push('Kissing reference detected - ensure age-appropriate context')
+    }
+  }
+  // High school has fewer content warnings, focusing on universal prohibitions
+
+  return result
+}
+
+/**
+ * Age-aware theme validation
+ */
+export function validateThemeForAge(
+  theme: string,
+  ageBand: AgeBand
+): ContentValidationResult {
+  const result: ContentValidationResult = {
+    isValid: true,
+    violations: [],
+    warnings: [],
+    suggestions: [],
+  }
+
+  const lowerTheme = theme.toLowerCase()
+  const schoolLevel = getSchoolLevel(ageBand)
+  const permittedThemes = getPermittedThemesForAge(ageBand)
+
+  // Check if theme is explicitly permitted
+  const hasPermittedTheme = permittedThemes.some(
+    permitted => lowerTheme.includes(permitted.toLowerCase())
+  )
+
+  // Check for universally prohibited themes
+  const universallyProhibitedThemes = [
+    'sexual',
+    'explicit',
+    'violent gore',
+    'substance abuse',
+    'self-harm',
+  ]
+
+  for (const prohibited of universallyProhibitedThemes) {
+    if (lowerTheme.includes(prohibited)) {
+      result.isValid = false
+      result.violations.push(`Universally prohibited theme: "${prohibited}"`)
+    }
+  }
+
+  // Age-specific theme restrictions
+  if (schoolLevel === 'early_childhood' || schoolLevel === 'elementary') {
+    for (const prohibited of PROHIBITED_THEMES) {
+      if (lowerTheme.includes(prohibited.toLowerCase())) {
+        result.isValid = false
+        result.violations.push(`Theme not appropriate for ${schoolLevel}: "${prohibited}"`)
+      }
+    }
+  } else if (schoolLevel === 'middle_school') {
+    // Some themes become warnings rather than violations
+    const cautionThemes = ['romance', 'dating', 'relationships']
+    for (const caution of cautionThemes) {
+      if (lowerTheme.includes(caution)) {
+        result.warnings.push(`Theme "${caution}" requires careful, age-appropriate handling for middle school`)
+      }
+    }
+  }
+  // High school themes are more permissive
+
+  if (!hasPermittedTheme && result.isValid && result.violations.length === 0) {
+    result.warnings.push('Theme does not clearly match recommended themes - manual review suggested')
+    result.suggestions.push(`Recommended themes: ${permittedThemes.slice(0, 5).join(', ')}`)
+  }
+
+  return result
+}
+
+/**
+ * Extended story request interface with age band
+ */
+export interface AgeAwareStoryRequest extends StoryGenerationRequest {
+  ageBand: AgeBand
+}
+
+/**
+ * Comprehensive age-aware story request validation
+ */
+export function validateStoryRequestForAge(
+  request: AgeAwareStoryRequest
+): ContentValidationResult {
+  const result: ContentValidationResult = {
+    isValid: true,
+    violations: [],
+    warnings: [],
+    suggestions: [],
+  }
+
+  const { ageBand } = request
+
+  // Validate theme with age awareness
+  const themeResult = validateThemeForAge(request.theme, ageBand)
+  result.violations.push(...themeResult.violations)
+  result.warnings.push(...themeResult.warnings)
+  result.suggestions.push(...themeResult.suggestions)
+
+  // Validate emotional focus with age awareness
+  if (request.emotionalFocus) {
+    const emotionResult = validateEmotionalFocusForAge(request.emotionalFocus, ageBand)
+    result.violations.push(...emotionResult.violations)
+    result.warnings.push(...emotionResult.warnings)
+  }
+
+  // Validate character description
+  if (request.characterDescription) {
+    const charResult = validateTextContentForAge(request.characterDescription, ageBand)
+    result.violations.push(...charResult.violations)
+    result.warnings.push(...charResult.warnings)
+  }
+
+  // Validate setting
+  if (request.setting) {
+    const settingResult = validateTextContentForAge(request.setting, ageBand)
+    result.violations.push(...settingResult.violations)
+    result.warnings.push(...settingResult.warnings)
+  }
+
+  // Validate additional instructions
+  if (request.additionalInstructions) {
+    const instrResult = validateTextContentForAge(request.additionalInstructions, ageBand)
+    result.violations.push(...instrResult.violations)
+    result.warnings.push(...instrResult.warnings)
+  }
+
+  result.isValid = result.violations.length === 0
+
+  return result
+}
+
+/**
+ * Age-aware emotional focus validation
+ */
+export function validateEmotionalFocusForAge(
+  emotionalFocus: string[],
+  ageBand: AgeBand
+): ContentValidationResult {
+  const result: ContentValidationResult = {
+    isValid: true,
+    violations: [],
+    warnings: [],
+    suggestions: [],
+  }
+
+  const schoolLevel = getSchoolLevel(ageBand)
+
+  // Permitted emotions expand with age
+  const basePermittedEmotions = [
+    'calm', 'patience', 'self_regulation', 'joy', 'gratitude',
+    'confidence', 'empathy', 'kindness', 'belonging', 'curiosity',
+    'resilience', 'courage', 'worry', 'anger', 'sadness', 'loneliness',
+  ]
+
+  const middleSchoolEmotions = [
+    ...basePermittedEmotions,
+    'self_discovery', 'peer_pressure', 'identity', 'academic_stress',
+  ]
+
+  const highSchoolEmotions = [
+    ...middleSchoolEmotions,
+    'ethical_reasoning', 'social_responsibility', 'independence',
+    'future_planning', 'cultural_identity', 'global_awareness',
+  ]
+
+  let permittedEmotions: string[]
+  switch (schoolLevel) {
+    case 'early_childhood':
+    case 'elementary':
+      permittedEmotions = basePermittedEmotions
+      break
+    case 'middle_school':
+      permittedEmotions = middleSchoolEmotions
+      break
+    case 'high_school':
+      permittedEmotions = highSchoolEmotions
+      break
+    default:
+      permittedEmotions = basePermittedEmotions
+  }
+
+  // Check each emotional focus
+  for (const emotion of emotionalFocus) {
+    const lowerEmotion = emotion.toLowerCase().replace(/-/g, '_')
+
+    if (!permittedEmotions.includes(lowerEmotion)) {
+      // Check if it's explicitly prohibited or just unknown
+      const romanticCoded = ['love', 'attraction', 'desire', 'passion', 'longing', 'romantic']
+      if (romanticCoded.includes(lowerEmotion)) {
+        if (schoolLevel === 'early_childhood' || schoolLevel === 'elementary') {
+          result.isValid = false
+          result.violations.push(`Romantic-coded emotion not appropriate for ${schoolLevel}: "${emotion}"`)
+        } else {
+          result.warnings.push(`Emotion "${emotion}" should be handled age-appropriately`)
+        }
+      } else {
+        result.warnings.push(`Unknown emotional focus: "${emotion}" - verify it's appropriate for ${schoolLevel}`)
+      }
+    }
+  }
+
+  return result
+}
+
+/**
+ * Age-aware generated story validation
+ */
+export function validateGeneratedStoryForAge(
+  story: {
+    title: string
+    description: string
+    pages: Array<{ text_content: string; illustration_prompt: string }>
+  },
+  ageBand: AgeBand
+): ContentValidationResult {
+  const result: ContentValidationResult = {
+    isValid: true,
+    violations: [],
+    warnings: [],
+    suggestions: [],
+  }
+
+  // Validate title
+  const titleResult = validateTextContentForAge(story.title, ageBand)
+  if (!titleResult.isValid) {
+    result.violations.push(`Title: ${titleResult.violations.join(', ')}`)
+  }
+  result.warnings.push(...titleResult.warnings.map(w => `Title: ${w}`))
+
+  // Validate description
+  const descResult = validateTextContentForAge(story.description, ageBand)
+  if (!descResult.isValid) {
+    result.violations.push(`Description: ${descResult.violations.join(', ')}`)
+  }
+  result.warnings.push(...descResult.warnings.map(w => `Description: ${w}`))
+
+  // Validate each page
+  for (let i = 0; i < story.pages.length; i++) {
+    const page = story.pages[i]
+    const pageNum = i + 1
+
+    // Validate text content
+    const textResult = validateTextContentForAge(page.text_content, ageBand)
+    if (!textResult.isValid) {
+      result.violations.push(`Page ${pageNum} text: ${textResult.violations.join(', ')}`)
+    }
+    result.warnings.push(...textResult.warnings.map(w => `Page ${pageNum}: ${w}`))
+
+    // Validate illustration prompt
+    const illustrationResult = validateIllustrationPromptForAge(page.illustration_prompt, ageBand)
+    if (!illustrationResult.isValid) {
+      result.violations.push(`Page ${pageNum} illustration: ${illustrationResult.violations.join(', ')}`)
+    }
+    result.warnings.push(...illustrationResult.warnings.map(w => `Page ${pageNum} illustration: ${w}`))
+  }
+
+  result.isValid = result.violations.length === 0
+
+  return result
+}
+
+/**
+ * Age-aware illustration prompt validation
+ */
+export function validateIllustrationPromptForAge(
+  prompt: string,
+  ageBand: AgeBand
+): ContentValidationResult {
+  const result: ContentValidationResult = {
+    isValid: true,
+    violations: [],
+    warnings: [],
+    suggestions: [],
+  }
+
+  const lowerPrompt = prompt.toLowerCase()
+  const schoolLevel = getSchoolLevel(ageBand)
+
+  // Universal prohibitions (all ages)
+  const universallyProhibited = [
+    'revealing',
+    'suggestive',
+    'seductive',
+    'sexy',
+    'provocative',
+    'alluring',
+    'intimate setting',
+    'naked',
+    'nude',
+  ]
+
+  for (const element of universallyProhibited) {
+    if (lowerPrompt.includes(element)) {
+      result.isValid = false
+      result.violations.push(`Prohibited illustration element: "${element}"`)
+    }
+  }
+
+  // Age-specific checks
+  if (schoolLevel === 'early_childhood' || schoolLevel === 'elementary') {
+    // Strict checks for romantic imagery
+    const romanticImagery = [
+      'holding hands romantically',
+      'gazing into eyes',
+      'romantic pose',
+      'couple pose',
+      'wedding',
+      'kissing',
+      'embracing romantically',
+      'love hearts',
+      'romantic hearts',
+      'blushing at each other',
+    ]
+
+    for (const imagery of romanticImagery) {
+      if (lowerPrompt.includes(imagery)) {
+        result.isValid = false
+        result.violations.push(`Prohibited imagery for ${schoolLevel}: "${imagery}"`)
+      }
+    }
+
+    // Warnings for ambiguous content
+    if (lowerPrompt.includes('heart') && !lowerPrompt.includes('family')) {
+      result.warnings.push('Heart imagery detected - ensure it represents family love, not romantic')
+    }
+  } else if (schoolLevel === 'middle_school') {
+    // Moderate checks
+    const cautionImagery = ['romantic pose', 'couple pose', 'kissing on lips']
+    for (const imagery of cautionImagery) {
+      if (lowerPrompt.includes(imagery)) {
+        result.warnings.push(`Imagery "${imagery}" should be handled age-appropriately for middle school`)
+      }
+    }
+  }
+  // High school has fewer restrictions on illustration prompts
+
+  return result
+}
+
+/**
+ * Get content safety summary for age band
+ */
+export function getContentSafetySummary(ageBand: AgeBand): {
+  schoolLevel: SchoolLevel
+  restrictionLevel: 'strict' | 'moderate' | 'permissive'
+  prohibitedTermCount: number
+  permittedThemeCount: number
+  guidelines: string[]
+} {
+  const schoolLevel = getSchoolLevel(ageBand)
+  const prohibitedTerms = getProhibitedTermsForAge(ageBand)
+  const permittedThemes = getPermittedThemesForAge(ageBand)
+
+  let restrictionLevel: 'strict' | 'moderate' | 'permissive'
+  let guidelines: string[]
+
+  switch (schoolLevel) {
+    case 'early_childhood':
+    case 'elementary':
+      restrictionLevel = 'strict'
+      guidelines = [
+        'No romantic themes or relationships',
+        'Focus on family, friendship, and learning',
+        'Simple, age-appropriate emotional themes',
+        'No appearance-focused content',
+        'Safe, nurturing environments only',
+      ]
+      break
+
+    case 'middle_school':
+      restrictionLevel = 'moderate'
+      guidelines = [
+        'Age-appropriate identity exploration',
+        'Peer relationships without romantic focus',
+        'Social challenges handled thoughtfully',
+        'Complex emotions with guidance',
+        'No explicit romantic content',
+      ]
+      break
+
+    case 'high_school':
+      restrictionLevel = 'permissive'
+      guidelines = [
+        'Mature themes handled appropriately',
+        'Age-appropriate relationship awareness',
+        'Complex social and ethical themes',
+        'No explicit or sexualized content',
+        'Universal prohibitions still apply',
+      ]
+      break
+
+    default:
+      restrictionLevel = 'strict'
+      guidelines = ['Default to strictest content guidelines']
+  }
+
+  return {
+    schoolLevel,
+    restrictionLevel,
+    prohibitedTermCount: prohibitedTerms.length,
+    permittedThemeCount: permittedThemes.length,
+    guidelines,
   }
 }

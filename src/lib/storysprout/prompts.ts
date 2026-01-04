@@ -2,10 +2,26 @@
  * StorySprout AI Story Generation Prompts
  *
  * These prompts are designed for Claude/GPT to generate age-appropriate,
- * curriculum-aligned children's stories with sight word integration.
+ * curriculum-aligned stories with sight word integration for children
+ * and young adults (ages 2-18+).
+ *
+ * Extended to support:
+ * - Complete grade levels (Pre-K through Grade 12)
+ * - Global cultural contexts and geographic themes
+ * - Character customization with cultural representation
  */
 
-import { AgeBand, StoryCategory } from './types'
+import {
+  AgeBand,
+  StoryCategory,
+  Continent,
+  GlobalRegion,
+  SchoolLevel,
+  CountryConfig,
+  FEATURED_COUNTRIES,
+  AGE_BANDS,
+  getSchoolLevel,
+} from './types'
 
 // =====================================================
 // CHILD LIFE & CONTENT NEUTRALITY GUARDRAIL
@@ -14,17 +30,29 @@ import { AgeBand, StoryCategory } from './types'
 /**
  * MANDATORY CONTENT SAFETY POLICY
  *
- * All child-focused content must remain strictly age-appropriate,
- * non-romantic, and non-sexualized in nature.
+ * All content must remain strictly age-appropriate and non-sexualized.
+ * Romantic content is restricted based on age band.
  */
 export const CONTENT_SAFETY_GUARDRAIL = `
 ═══════════════════════════════════════════════════════════════════════════════
-MANDATORY CHILD CONTENT SAFETY GUARDRAIL - STRICTLY ENFORCED
+MANDATORY CONTENT SAFETY GUARDRAIL - STRICTLY ENFORCED
 ═══════════════════════════════════════════════════════════════════════════════
 
 All content MUST comply with the following non-negotiable safety requirements:
 
-ABSOLUTELY PROHIBITED CONTENT:
+FOR ALL AGES (2-18+):
+━━━━━━━━━━━━━━━━━━━━
+ABSOLUTELY PROHIBITED:
+✗ Sexualized content of any kind
+✗ Explicit romantic/physical content
+✗ Violence glorification or graphic content
+✗ Drug/alcohol promotion
+✗ Hate speech or discrimination
+✗ Self-harm or dangerous behavior promotion
+
+FOR ELEMENTARY & YOUNGER (Ages 2-11, Pre-K through Grade 5):
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+PROHIBITED CONTENT:
 1. Romantic relationships of ANY kind between ANY characters
 2. Dating, crushes, attraction, or romantic interest themes
 3. Marriage or wedding themes except parent/guardian references
@@ -32,8 +60,7 @@ ABSOLUTELY PROHIBITED CONTENT:
 5. "Boyfriend," "girlfriend," or relationship-coded language
 6. Heart symbols or imagery suggesting romantic love
 7. Identity exploration related to relationships or attraction
-8. Coded references, symbolic messaging, or subtext about relationships
-9. Any content that could normalize adult relationship concepts for children
+8. Coded references or subtext about romantic relationships
 
 PERMITTED RELATIONSHIP CONTEXTS ONLY:
 ✓ Family bonds: parents, guardians, siblings, grandparents, extended family
@@ -43,7 +70,36 @@ PERMITTED RELATIONSHIP CONTEXTS ONLY:
 ✓ Mentorship: learning from adults in appropriate roles
 ✓ Animal companions: pets, animal friends in stories
 
-EMOTIONAL THEMES MUST BE LIMITED TO:
+FOR MIDDLE SCHOOL (Ages 11-14, Grades 6-8):
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+PERMITTED (handled appropriately):
+✓ Age-appropriate "crush" storylines (butterflies, nervousness)
+✓ Friendship evolving themes
+✓ Identity exploration in age-appropriate ways
+✓ Peer relationship dynamics
+✓ Coming-of-age themes without romantic focus
+
+STILL PROHIBITED:
+✗ Dating or relationship-focused narratives
+✗ Physical romantic content
+✗ Relationship drama as central theme
+
+FOR HIGH SCHOOL (Ages 14-18, Grades 9-12):
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+PERMITTED (handled maturely and appropriately):
+✓ Age-appropriate relationship themes
+✓ Coming-of-age and identity narratives
+✓ Social dynamics and peer relationships
+✓ Mature themes handled thoughtfully (not explicitly)
+
+STILL PROHIBITED:
+✗ Explicit romantic/physical content
+✗ Glorification of unhealthy relationships
+✗ Sexualized content
+
+EMOTIONAL THEMES BY AGE LEVEL:
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+ELEMENTARY & YOUNGER:
 ✓ Self-confidence and self-worth
 ✓ Kindness, empathy, and compassion
 ✓ Courage and facing fears
@@ -53,30 +109,43 @@ EMOTIONAL THEMES MUST BE LIMITED TO:
 ✓ Responsibility and helping others
 ✓ Managing emotions (anger, sadness, worry, joy)
 ✓ Belonging to family, school, and community
-✓ Friendship and cooperation
+
+MIDDLE SCHOOL (additions):
+✓ Identity formation
+✓ Peer pressure and decision-making
+✓ Social justice awareness
+✓ Academic and personal challenges
+✓ Self-discovery
+
+HIGH SCHOOL (additions):
+✓ Complex moral dilemmas
+✓ Civic responsibility
+✓ Career exploration
+✓ Global citizenship
+✓ Independent thinking
 
 CHARACTER DESIGN REQUIREMENTS:
-- No suggestive clothing or appearance
 - Age-appropriate attire for activities depicted
-- No emphasis on physical attractiveness between characters
-- Diverse, inclusive representation without relationship undertones
+- Diverse, inclusive representation
+- Cultural authenticity when representing specific cultures
+- No sexualized clothing or appearance at any age
 
 ILLUSTRATION REQUIREMENTS:
-- No romantic poses, gazes, or compositions
-- No heart imagery suggesting romantic love (family love hearts acceptable)
-- No couple-coded visual arrangements
-- Characters interact as friends, family, or community members only
+- No romantic poses or gazes for elementary and younger
+- Age-appropriate compositions
+- Cultural sensitivity in visual representation
+- Characters depicted in contextually appropriate ways
 
 PURPOSE OF THIS GUARDRAIL:
-• Preserve developmentally appropriate content for ages 2-10
+• Preserve developmentally appropriate content for all ages
 • Respect diverse family values and cultural expectations
-• Keep focus on learning, imagination, safety, and emotional well-being
-• Avoid premature exposure to adult social or relational constructs
+• Keep focus on learning, growth, and emotional well-being
+• Avoid inappropriate exposure to content beyond developmental readiness
 
 If ANY content request conflicts with these guardrails, you MUST:
 1. Refuse to generate the prohibited content
 2. Suggest an appropriate alternative that maintains the story's purpose
-3. Ensure all output strictly adheres to permitted themes
+3. Ensure all output strictly adheres to age-appropriate themes
 
 ═══════════════════════════════════════════════════════════════════════════════
 `
@@ -227,7 +296,7 @@ ILLUSTRATION GUIDANCE:
 - Character consistency across pages
 - Visual metaphors possible`,
 
-  grade_4: `You are a children's story writer specializing in books for Grade 4 children (ages 8-10).
+  grade_4: `You are a children's story writer specializing in books for Grade 4 children (ages 9-10).
 
 DEVELOPMENTAL GUIDELINES:
 - Advanced vocabulary with literary language
@@ -253,7 +322,240 @@ ILLUSTRATION GUIDANCE:
 - Artistic style can be more varied
 - Symbolic elements welcome
 - Can show passage of time
-- Characters show subtle emotions`
+- Characters show subtle emotions`,
+
+  grade_5: `You are a story writer specializing in books for Grade 5 students (ages 10-11).
+
+DEVELOPMENTAL GUIDELINES:
+- Rich, varied vocabulary with context-embedded learning
+- Complex sentence structures with subordinate clauses
+- 120-180 words per page
+- Multi-chapter stories with developed subplots
+- Characters with internal conflicts and growth arcs
+- Themes: cultural identity, historical perspectives, scientific discovery, social dynamics
+
+READING LEVEL:
+- Flesch-Kincaid Grade Level 4.5-5.5
+- Extended dialogue and internal monologue
+- Sophisticated figurative language
+- Cross-curricular connections
+
+EMOTIONAL TONE:
+- Pre-adolescent experiences and transitions
+- Complex friendships and peer dynamics
+- Academic and personal challenges
+- Self-discovery and capability building
+
+ILLUSTRATION GUIDANCE:
+- More sophisticated artistic styles acceptable
+- Can include maps, diagrams, or infographics
+- Cinematic compositions
+- Mood and atmosphere emphasized`,
+
+  // =====================================================
+  // MIDDLE SCHOOL PROMPTS (Grades 6-8)
+  // =====================================================
+
+  grade_6: `You are a young adult story writer specializing in content for Grade 6 students (ages 11-12).
+
+DEVELOPMENTAL GUIDELINES:
+- Advanced vocabulary with academic language integration
+- Varied sentence structures including compound-complex
+- 150-220 words per page
+- Full novels with multiple POV possible
+- Characters navigating middle school transitions
+- Themes: identity formation, peer relationships, academic challenges, cultural awareness
+
+READING LEVEL:
+- Flesch-Kincaid Grade Level 5.5-6.5
+- Extended narrative with flashbacks/flash-forwards
+- Literary devices: foreshadowing, symbolism, irony
+- Real-world issue integration
+
+EMOTIONAL TONE:
+- Early adolescent concerns validated
+- Navigating changing friendships
+- Finding one's place and voice
+- Dealing with increased expectations
+
+ILLUSTRATION GUIDANCE (if applicable):
+- Graphic novel style acceptable
+- Minimal illustrations or chapter headers
+- Maps, timelines for historical/geographic content
+- Cover art and occasional spot illustrations`,
+
+  grade_7: `You are a young adult story writer specializing in content for Grade 7 students (ages 12-13).
+
+DEVELOPMENTAL GUIDELINES:
+- Sophisticated vocabulary with discipline-specific terms
+- Complex literary sentence structures
+- 180-250 words per page
+- Multi-layered narratives with thematic depth
+- Characters facing moral dilemmas and ethical choices
+- Themes: social justice, global citizenship, historical events, personal responsibility
+
+READING LEVEL:
+- Flesch-Kincaid Grade Level 6.5-7.5
+- Unreliable narrators, multiple perspectives
+- Advanced literary analysis appropriate
+- Integration of primary source materials possible
+
+EMOTIONAL TONE:
+- Validate the intensity of adolescent emotions
+- Explore consequences of choices
+- Model healthy conflict resolution
+- Address real-world challenges sensitively
+
+CONTENT CONSIDERATIONS:
+- Can address heavier themes (bullying, prejudice, loss) thoughtfully
+- Social media and technology contexts relevant
+- Global and historical perspectives important
+- Always maintain hope and agency`,
+
+  grade_8: `You are a young adult story writer specializing in content for Grade 8 students (ages 13-14).
+
+DEVELOPMENTAL GUIDELINES:
+- Mature vocabulary with nuanced meaning
+- Sophisticated prose with varied pacing
+- 200-300 words per page
+- Complex narratives ready for high school transition
+- Characters demonstrating emerging independence
+- Themes: human rights, environmental issues, cultural conflicts, identity and belonging
+
+READING LEVEL:
+- Flesch-Kincaid Grade Level 7.5-8.5
+- Can handle ambiguity and open endings
+- Intertextual references appropriate
+- Research and critical thinking integration
+
+EMOTIONAL TONE:
+- Honor the complexity of being 13-14
+- Transition from childhood to young adulthood
+- Relationships with adults evolving
+- Preparing for increased independence
+
+CONTENT CONSIDERATIONS:
+- Historical fiction with accurate portrayal
+- Social issues addressed with nuance
+- Cultural representation with authenticity
+- Mentorship and guidance themes`,
+
+  // =====================================================
+  // HIGH SCHOOL PROMPTS (Grades 9-12)
+  // =====================================================
+
+  grade_9: `You are a young adult/literary fiction writer for Grade 9 students (ages 14-15).
+
+DEVELOPMENTAL GUIDELINES:
+- Literary vocabulary with rich, precise language
+- Varied prose styles matching content and genre
+- 200-350 words per page
+- Full-length novels with complex structure
+- Characters navigating high school and identity
+- Themes: self-discovery, social dynamics, moral complexity, future planning
+
+READING LEVEL:
+- Flesch-Kincaid Grade Level 8-9
+- Genre flexibility (realistic fiction, sci-fi, fantasy, historical)
+- Can include mature themes handled appropriately
+- Literary merit considerations
+
+EMOTIONAL TONE:
+- Validate teenage experiences authentically
+- Explore identity in multiple dimensions
+- Academic and social pressures acknowledged
+- Hope and agency through challenges
+
+CONTENT SCOPE:
+- World literature influences
+- Contemporary social issues
+- Historical events with personal impact
+- Career and future exploration themes`,
+
+  grade_10: `You are a literary fiction writer for Grade 10 students (ages 15-16).
+
+DEVELOPMENTAL GUIDELINES:
+- Sophisticated literary language
+- Experimental narrative structures possible
+- 250-400 words per page
+- Complex character studies and social commentary
+- Characters making consequential decisions
+- Themes: world cultures, political awareness, moral philosophy, relationships
+
+READING LEVEL:
+- Flesch-Kincaid Grade Level 9-10
+- World literature traditions
+- Cross-cultural narratives
+- Integration of historical and contemporary contexts
+
+EMOTIONAL TONE:
+- Honor emerging adult perspectives
+- Complex ethical dilemmas
+- Consequences of choices explored
+- Global empathy development
+
+CONTENT SCOPE:
+- International settings and characters
+- Social movements and change
+- Environmental and sustainability themes
+- Economic and social justice issues`,
+
+  grade_11: `You are a literary fiction writer for Grade 11 students (ages 16-17).
+
+DEVELOPMENTAL GUIDELINES:
+- Advanced literary and academic vocabulary
+- Mastery of multiple prose styles
+- 300-450 words per page
+- Publication-quality narrative structure
+- Characters as vehicles for ideas and growth
+- Themes: civic engagement, historical analysis, scientific ethics, leadership
+
+READING LEVEL:
+- Flesch-Kincaid Grade Level 10-11
+- AP/IB literature connections
+- Research-integrated narratives
+- Argumentative elements possible
+
+EMOTIONAL TONE:
+- Near-adult perspectives validated
+- Preparing for independent life
+- Complex relationship dynamics
+- Responsibility and consequence
+
+CONTENT SCOPE:
+- College and career preparation themes
+- Leadership and service
+- Global affairs and citizenship
+- Legacy and impact considerations`,
+
+  grade_12: `You are a literary fiction writer for Grade 12 students (ages 17-18).
+
+DEVELOPMENTAL GUIDELINES:
+- College-level vocabulary and prose
+- Full range of literary techniques
+- 350-500 words per page
+- Thesis-worthy narrative complexity
+- Characters at threshold of adulthood
+- Themes: life transitions, philosophical inquiry, global responsibility, identity synthesis
+
+READING LEVEL:
+- Flesch-Kincaid Grade Level 11-12+
+- Integration with academic study
+- Literary criticism awareness
+- Original voice development
+
+EMOTIONAL TONE:
+- Transition to adulthood honored
+- Uncertainty and possibility balanced
+- Legacy of childhood integrated
+- Future-facing with grounded wisdom
+
+CONTENT SCOPE:
+- Capstone themes and reflections
+- Global citizenship preparation
+- Career and life purpose exploration
+- Intergenerational wisdom and continuity
+- Philosophy and meaning-making`,
 }
 
 // =====================================================
@@ -414,21 +716,38 @@ TECHNICAL REQUIREMENTS:
 // =====================================================
 
 export const CATEGORY_THEMES: Record<StoryCategory, string[]> = {
+  // Original Categories
   bedtime: [
     'Saying goodnight to the day',
     'Cozy bedtime routines',
     'Dream adventures',
     'Nighttime sounds and peace',
     'The moon and stars watching over',
-    'Sleepy animal friends'
+    'Sleepy animal friends',
   ],
-  adventure: [
-    'Exploring a new place',
-    'Finding hidden treasures',
-    'Making unexpected discoveries',
-    'Overcoming a small challenge',
-    'Journey with a friend',
-    'Nature exploration'
+  seasonal: [
+    'Seasons changing',
+    'Holiday traditions',
+    'Seasonal celebrations',
+    'Weather wonders',
+    'Nature through the year',
+    'Cultural seasonal observances',
+  ],
+  cultural: [
+    'Celebrating heritage',
+    'Traditional customs and practices',
+    'Cultural foods and recipes',
+    'Traditional clothing and dress',
+    'Festivals around the world',
+    'Family traditions from different cultures',
+  ],
+  curriculum: [
+    'Counting and math adventures',
+    'Science exploration',
+    'Historical events',
+    'Geography discoveries',
+    'Language and literacy',
+    'Social studies concepts',
   ],
   emotional_social: [
     'Making a new friend',
@@ -436,31 +755,7 @@ export const CATEGORY_THEMES: Record<StoryCategory, string[]> = {
     'Being kind to others',
     'Sharing and taking turns',
     'Feeling left out and belonging',
-    'Understanding different perspectives'
-  ],
-  educational: [
-    'Counting adventures',
-    'Color discoveries',
-    'Shape hunts',
-    'Letter sounds in action',
-    'Science exploration',
-    'Learning about the world'
-  ],
-  family: [
-    'Special time with family',
-    'New siblings',
-    'Visiting grandparents',
-    'Family traditions',
-    'Helping at home',
-    'Multi-generational stories'
-  ],
-  nature: [
-    'Seasons changing',
-    'Garden growing',
-    'Animal homes',
-    'Weather wonders',
-    'Ocean exploration',
-    'Forest friends'
+    'Understanding different perspectives',
   ],
   school: [
     'First day feelings',
@@ -468,16 +763,126 @@ export const CATEGORY_THEMES: Record<StoryCategory, string[]> = {
     'Learning something new',
     'Show and tell',
     'Playground adventures',
-    'Teacher appreciation'
+    'Teacher appreciation',
   ],
-  holiday: [
-    'Celebrating together',
-    'Holiday traditions',
-    'Giving and gratitude',
-    'Seasonal celebrations',
-    'Cultural holidays',
-    'Making memories'
-  ]
+  family: [
+    'Special time with family',
+    'New siblings',
+    'Visiting grandparents',
+    'Family traditions',
+    'Helping at home',
+    'Multi-generational stories',
+  ],
+  adventure: [
+    'Exploring a new place',
+    'Finding hidden treasures',
+    'Making unexpected discoveries',
+    'Overcoming a small challenge',
+    'Journey with a friend',
+    'Nature exploration',
+  ],
+
+  // New Global/Geographic Categories
+  world_cultures: [
+    'Day in the life in different countries',
+    'Traditional games from around the world',
+    'Foods and cuisines across cultures',
+    'Music and dance traditions',
+    'Art and crafts from different cultures',
+    'Languages and communication',
+    'Celebrations and festivals worldwide',
+    'Traditional stories retold',
+  ],
+  geography_adventures: [
+    'Exploring continents and countries',
+    'Mountain and river journeys',
+    'Ocean and island discoveries',
+    'Desert and rainforest expeditions',
+    'City and countryside contrasts',
+    'Climate and ecosystems',
+    'Maps and navigation',
+    'Travel and transportation',
+  ],
+  historical_fiction: [
+    'Ancient civilizations',
+    'Medieval times and castles',
+    'Age of exploration',
+    'Industrial revolution era',
+    'World War periods (age-appropriate)',
+    'Civil rights movements',
+    'Space age adventures',
+    'Modern history events',
+  ],
+  mythology_folklore: [
+    'Greek and Roman myths',
+    'Norse mythology',
+    'African folklore and tales',
+    'Asian legends and stories',
+    'Native American traditions',
+    'Celtic and European folklore',
+    'South American myths',
+    'Creation stories from cultures',
+  ],
+  global_citizenship: [
+    'Environmental responsibility',
+    'Human rights and dignity',
+    'Peace and conflict resolution',
+    'Economic fairness and trade',
+    'Cultural respect and understanding',
+    'Community action and service',
+    'Democratic participation',
+    'Global challenges and solutions',
+  ],
+  environmental: [
+    'Climate and weather patterns',
+    'Endangered species protection',
+    'Ocean conservation',
+    'Forest preservation',
+    'Sustainable living',
+    'Renewable energy',
+    'Reducing waste and recycling',
+    'Protecting natural habitats',
+  ],
+  stem_stories: [
+    'Scientific discoveries',
+    'Inventors and innovations',
+    'Space and astronomy',
+    'Biology and nature science',
+    'Technology and coding',
+    'Engineering challenges',
+    'Math in everyday life',
+    'Medical breakthroughs',
+  ],
+  biography: [
+    'Scientists and inventors',
+    'Artists and musicians',
+    'Leaders and activists',
+    'Explorers and adventurers',
+    'Athletes and champions',
+    'Writers and poets',
+    'Everyday heroes',
+    'Trailblazers who changed history',
+  ],
+  coming_of_age: [
+    'Finding your identity',
+    'First major responsibilities',
+    'Navigating friendships',
+    'Dealing with change',
+    'Discovering talents and passions',
+    'Standing up for yourself',
+    'Family dynamics and growth',
+    'Planning for the future',
+  ],
+  social_issues: [
+    'Bullying and standing up',
+    'Inclusion and acceptance',
+    'Economic differences',
+    'Immigration stories',
+    'Gender equality',
+    'Disability awareness',
+    'Mental health awareness',
+    'Community and belonging',
+  ],
 }
 
 // =====================================================
@@ -489,7 +894,7 @@ export const SIGHT_WORDS_BY_LEVEL: Record<AgeBand, string[]> = {
     'a', 'and', 'away', 'big', 'blue', 'can', 'come', 'down', 'find', 'for',
     'funny', 'go', 'help', 'here', 'I', 'in', 'is', 'it', 'jump', 'little',
     'look', 'make', 'me', 'my', 'not', 'one', 'play', 'red', 'run', 'said',
-    'see', 'the', 'three', 'to', 'two', 'up', 'we', 'where', 'yellow', 'you'
+    'see', 'the', 'three', 'to', 'two', 'up', 'we', 'where', 'yellow', 'you',
   ],
   k_prep: [
     'all', 'am', 'are', 'at', 'ate', 'be', 'black', 'brown', 'but', 'came',
@@ -497,28 +902,28 @@ export const SIGHT_WORDS_BY_LEVEL: Record<AgeBand, string[]> = {
     'must', 'new', 'no', 'now', 'on', 'our', 'out', 'please', 'pretty', 'ran',
     'ride', 'saw', 'say', 'she', 'so', 'soon', 'that', 'there', 'they', 'this',
     'too', 'under', 'want', 'was', 'well', 'went', 'what', 'white', 'who', 'will',
-    'with', 'yes'
+    'with', 'yes',
   ],
   grade_1: [
     'after', 'again', 'an', 'any', 'as', 'ask', 'by', 'could', 'every', 'fly',
     'from', 'give', 'going', 'had', 'has', 'her', 'him', 'his', 'how', 'just',
     'know', 'let', 'live', 'may', 'of', 'old', 'once', 'open', 'over', 'put',
     'round', 'some', 'stop', 'take', 'thank', 'them', 'then', 'think', 'walk', 'were',
-    'when'
+    'when',
   ],
   grade_2: [
     'always', 'around', 'because', 'been', 'before', 'best', 'both', 'buy', 'call', 'cold',
     'does', "don't", 'fast', 'first', 'five', 'found', 'gave', 'goes', 'green', 'its',
     'made', 'many', 'off', 'or', 'pull', 'read', 'right', 'sing', 'sit', 'sleep',
     'tell', 'their', 'these', 'those', 'upon', 'us', 'use', 'very', 'wash', 'which',
-    'why', 'wish', 'work', 'would', 'write', 'your'
+    'why', 'wish', 'work', 'would', 'write', 'your',
   ],
   grade_3: [
     'about', 'better', 'bring', 'carry', 'clean', 'cut', 'done', 'draw', 'drink', 'eight',
     'fall', 'far', 'full', 'got', 'grow', 'hold', 'hot', 'hurt', 'if', 'keep',
     'kind', 'laugh', 'light', 'long', 'much', 'myself', 'never', 'only', 'own', 'pick',
     'seven', 'shall', 'show', 'six', 'small', 'start', 'ten', 'today', 'together', 'try',
-    'warm'
+    'warm',
   ],
   grade_4: [
     'above', 'across', 'against', 'along', 'already', 'although', 'among', 'answer', 'behind', 'believe',
@@ -528,8 +933,66 @@ export const SIGHT_WORDS_BY_LEVEL: Record<AgeBand, string[]> = {
     'often', 'order', 'perhaps', 'place', 'point', 'problem', 'question', 'ready', 'really', 'remember',
     'school', 'second', 'sentence', 'should', 'since', 'something', 'sometimes', 'sound', 'special', 'still',
     'story', 'study', 'such', 'sure', 'though', 'thought', 'through', 'understand', 'until', 'usually',
-    'whole', 'without', 'world', 'young'
-  ]
+    'whole', 'without', 'world', 'young',
+  ],
+  grade_5: [
+    'ability', 'achieve', 'ancient', 'benefit', 'century', 'character', 'community', 'compare', 'conclusion',
+    'contrast', 'culture', 'decision', 'describe', 'develop', 'discover', 'effect', 'environment', 'especially',
+    'evidence', 'experience', 'government', 'history', 'imagine', 'include', 'individual', 'influence',
+    'information', 'necessary', 'opportunity', 'particular', 'population', 'process', 'produce', 'purpose',
+    'region', 'represent', 'resource', 'similar', 'solution', 'structure', 'suggest', 'support', 'tradition',
+  ],
+  // Middle school and above: focus shifts from sight words to academic vocabulary
+  // These are high-frequency academic words for each level
+  grade_6: [
+    'analyze', 'approach', 'assume', 'authority', 'available', 'circumstance', 'complex', 'concept',
+    'consequence', 'considerable', 'context', 'contribute', 'crucial', 'demonstrate', 'distinct',
+    'emphasis', 'establish', 'evaluate', 'factor', 'function', 'identify', 'impact', 'indicate',
+    'interpret', 'involve', 'method', 'occur', 'perspective', 'principle', 'significant', 'source',
+    'specific', 'strategy', 'theory', 'vary',
+  ],
+  grade_7: [
+    'acquire', 'advocate', 'alternative', 'approximate', 'assess', 'comprehensive', 'conduct',
+    'constitute', 'construct', 'criteria', 'dimension', 'evident', 'explicit', 'extract', 'fundamental',
+    'generate', 'hypothesis', 'implement', 'implicit', 'initial', 'investigate', 'justify', 'maintain',
+    'modify', 'obtain', 'perceive', 'phenomenon', 'relevant', 'resolve', 'reveal', 'significant',
+    'subsequent', 'sustain', 'valid',
+  ],
+  grade_8: [
+    'abstract', 'acknowledge', 'adequate', 'adjacent', 'advocate', 'ambiguous', 'analogy', 'attribute',
+    'coherent', 'compatible', 'contemporary', 'contradict', 'correlate', 'deduce', 'derive', 'discriminate',
+    'empirical', 'enhance', 'ethical', 'formulate', 'hierarchy', 'ideology', 'inherent', 'integral',
+    'liable', 'paradigm', 'parameter', 'predominant', 'premise', 'prevalent', 'rationale', 'simulate',
+    'subordinate', 'synthesize',
+  ],
+  grade_9: [
+    'aesthetic', 'affirm', 'alienate', 'allusion', 'ambivalent', 'articulate', 'assertion', 'brevity',
+    'causality', 'cogent', 'compelling', 'connotation', 'consensus', 'contention', 'credible', 'denote',
+    'dichotomy', 'disposition', 'elucidate', 'exemplify', 'facilitate', 'feasible', 'foreshadow',
+    'illuminate', 'inference', 'irony', 'juxtaposition', 'metaphor', 'motif', 'nuance', 'objectivity',
+    'paradox', 'rhetoric', 'satirical', 'thematic',
+  ],
+  grade_10: [
+    'adversary', 'allegory', 'annotation', 'archetype', 'autonomy', 'catharsis', 'chronicle', 'circumvent',
+    'cohesive', 'concur', 'conjecture', 'delineate', 'didactic', 'discourse', 'disseminate', 'eloquent',
+    'epiphany', 'explication', 'extrapolate', 'hegemony', 'hyperbole', 'infer', 'innuendo', 'intrinsic',
+    'manifesto', 'mediate', 'pathos', 'pragmatic', 'protagonist', 'reciprocal', 'refute', 'substantiate',
+    'trajectory', 'verisimilitude',
+  ],
+  grade_11: [
+    'advocacy', 'antithesis', 'authenticate', 'cognition', 'corroborate', 'dialectic', 'dichotomy',
+    'disposition', 'dissent', 'efficacy', 'egalitarian', 'empiricism', 'epistemology', 'ethos', 'exigent',
+    'explicate', 'fallacy', 'hermeneutics', 'hubris', 'ideology', 'imperialism', 'inference', 'logos',
+    'machination', 'meritocracy', 'nihilism', 'ontology', 'pathos', 'polemic', 'postulate', 'predicate',
+    'progenitor', 'solipsism', 'synthesis',
+  ],
+  grade_12: [
+    'anachronism', 'antecedent', 'apotheosis', 'archaic', 'axiom', 'brevity', 'causation', 'conceit',
+    'cosmopolitan', 'deconstruct', 'determinism', 'dialectical', 'didacticism', 'dualism', 'enlightenment',
+    'epistemological', 'existential', 'humanism', 'idealism', 'materialism', 'metaphysical', 'modernism',
+    'naturalism', 'nominalism', 'ontological', 'paradigmatic', 'phenomenology', 'postmodernism', 'rationalism',
+    'reductionism', 'relativism', 'romanticism', 'transcendentalism', 'utilitarianism',
+  ],
 }
 
 // =====================================================
@@ -589,6 +1052,399 @@ export function buildCompletePrompt(input: StoryGenerationInput): {
   return {
     systemPrompt,
     userPrompt: fullUserPrompt,
-    illustrationStyle: ILLUSTRATION_STYLE_PROMPTS.soft_flat
+    illustrationStyle: ILLUSTRATION_STYLE_PROMPTS.soft_flat,
+  }
+}
+
+// =====================================================
+// CULTURAL CONTEXT PROMPTS
+// =====================================================
+
+export const CONTINENT_PROMPTS: Record<Continent, string> = {
+  africa: `Setting: African Continent
+Cultural Context: Africa is incredibly diverse with 54 countries and thousands of ethnic groups.
+Common Themes:
+- Ubuntu philosophy (I am because we are)
+- Respect for elders and community
+- Oral storytelling traditions (griots)
+- Connection to nature and animals
+- Family and extended family bonds
+- Traditional wisdom and proverbs
+
+Visual Elements:
+- Diverse landscapes: savannas, rainforests, deserts, mountains
+- Rich textile traditions: kente, mud cloth, batik
+- Wildlife: elephants, lions, giraffes, unique bird species
+- Traditional architecture: from mud houses to modern cities
+- Vibrant colors and patterns
+
+Ensure cultural authenticity without stereotyping. Africa is modern and traditional, urban and rural.`,
+
+  asia: `Setting: Asian Continent
+Cultural Context: Asia spans from the Middle East to the Pacific, with incredible diversity.
+Common Themes:
+- Harmony and balance
+- Family honor and respect
+- Educational achievement
+- Traditional arts and practices
+- Seasonal festivals and celebrations
+- Balance of modernity and tradition
+
+Visual Elements:
+- Diverse landscapes: mountains, rivers, islands, steppes
+- Traditional architecture: temples, pagodas, palaces
+- Cuisine and food culture
+- Traditional dress: kimono, hanbok, sari, ao dai
+- Calligraphy and art traditions
+
+Represent the diversity of Asian cultures without conflating distinct traditions.`,
+
+  europe: `Setting: European Continent
+Cultural Context: Europe blends ancient history with modern culture across many nations.
+Common Themes:
+- Rich history and heritage
+- Literary and artistic traditions
+- Democratic values and debate
+- Seasonal changes and celebrations
+- Family meals and gatherings
+- Environmental awareness
+
+Visual Elements:
+- Historic architecture: castles, cathedrals, villages
+- Diverse landscapes: Alps, Mediterranean, Nordic fjords
+- Art and museum culture
+- Traditional crafts and industries
+- Seasonal festivals and markets
+
+Represent European diversity from Nordic to Mediterranean, East to West.`,
+
+  north_america: `Setting: North American Continent
+Cultural Context: North America is a melting pot of Indigenous, immigrant, and developing cultures.
+Common Themes:
+- Indigenous traditions and respect for land
+- Immigration and multicultural heritage
+- Innovation and entrepreneurship
+- Community diversity
+- Natural wonder and conservation
+- Democratic participation
+
+Visual Elements:
+- Diverse landscapes: prairies, canyons, forests, coastlines
+- Urban and rural contrasts
+- Indigenous art and traditions
+- Multicultural neighborhoods
+- National parks and natural beauty
+
+Honor Indigenous cultures and the multicultural reality of North America.`,
+
+  south_america: `Setting: South American Continent
+Cultural Context: South America blends Indigenous, European, and African influences.
+Common Themes:
+- Connection to nature and the Amazon
+- Family and community bonds
+- Music, dance, and celebration
+- Indigenous wisdom and traditions
+- Colonial history and independence
+- Environmental stewardship
+
+Visual Elements:
+- Amazon rainforest and biodiversity
+- Andes mountains and highlands
+- Historic cities and colonial architecture
+- Vibrant festivals (Carnival)
+- Indigenous textiles and crafts
+
+Celebrate the rich cultural blend while honoring Indigenous traditions.`,
+
+  oceania: `Setting: Oceania (Australia, Pacific Islands, New Zealand)
+Cultural Context: Oceania includes ancient Indigenous cultures and Pacific Island traditions.
+Common Themes:
+- Connection to land and sea
+- Dreamtime and oral traditions
+- Navigation and exploration
+- Island community life
+- Conservation and sustainability
+- Cultural preservation
+
+Visual Elements:
+- Unique wildlife: kangaroos, koalas, marine life
+- Coral reefs and ocean landscapes
+- Indigenous art: dot painting, tapa cloth
+- Island scenery and beaches
+- Traditional boats and navigation
+
+Honor Aboriginal, Māori, and Pacific Islander cultures with authenticity.`,
+
+  antarctica: `Setting: Antarctica
+Cultural Context: Antarctica is a scientific frontier without permanent residents.
+Common Themes:
+- Scientific discovery and exploration
+- Environmental protection
+- International cooperation
+- Extreme conditions and adaptation
+- Climate research importance
+- Wildlife survival
+
+Visual Elements:
+- Ice landscapes and glaciers
+- Penguin colonies and seals
+- Research stations
+- Aurora australis
+- Expedition ships and equipment
+
+Focus on scientific exploration and environmental awareness.`,
+}
+
+export const REGION_CULTURAL_CONTEXTS: Partial<Record<GlobalRegion, string>> = {
+  // Africa Regions
+  west_africa: `West African Context: Rich in music, storytelling traditions, and complex kingdoms.
+Key elements: Anansi tales, drumming, extended family compounds, markets, gold coast history.`,
+
+  east_africa: `East African Context: Swahili coast culture, safari lands, and diverse ethnicities.
+Key elements: Safari wildlife, Maasai traditions, Swahili language, Great Rift Valley.`,
+
+  // Asia Regions
+  east_asia: `East Asian Context: Confucian values, technological advancement, ancient philosophies.
+Key elements: Calligraphy, tea ceremonies, respect for education, seasonal festivals.`,
+
+  southeast_asia: `Southeast Asian Context: Tropical islands, Buddhist traditions, diverse kingdoms.
+Key elements: Rice cultivation, temple architecture, water festivals, family businesses.`,
+
+  south_asia: `South Asian Context: Ancient civilizations, diverse religions, vibrant festivals.
+Key elements: Bollywood, cricket, monsoons, spice trade, textile traditions.`,
+
+  // Other key regions...
+  northern_europe: `Northern European Context: Viking heritage, winter traditions, social democracy.
+Key elements: Northern lights, fjords, design traditions, outdoor culture.`,
+
+  caribbean: `Caribbean Context: Island life, reggae, colonial history, cultural fusion.
+Key elements: Beach culture, Carnival, oral traditions, maritime heritage.`,
+}
+
+// =====================================================
+// CULTURAL STORY GENERATION HELPERS
+// =====================================================
+
+export interface CulturalStoryInput extends StoryGenerationInput {
+  continent?: Continent
+  region?: GlobalRegion
+  countryCode?: string
+  culturalElements?: string[]
+  languagesIncluded?: string[]
+}
+
+export function generateCulturalStoryPrompt(input: CulturalStoryInput): string {
+  const basePrompt = generateStoryPrompt(input)
+
+  let culturalContext = ''
+
+  // Add continent context
+  if (input.continent) {
+    culturalContext += `\n\n${CONTINENT_PROMPTS[input.continent]}`
+  }
+
+  // Add region context
+  if (input.region && REGION_CULTURAL_CONTEXTS[input.region]) {
+    culturalContext += `\n\n${REGION_CULTURAL_CONTEXTS[input.region]}`
+  }
+
+  // Add specific country context
+  if (input.countryCode) {
+    const country = FEATURED_COUNTRIES.find(c => c.code === input.countryCode)
+    if (country) {
+      culturalContext += `\n\nSPECIFIC COUNTRY: ${country.name} ${country.flag}
+Languages: ${country.languages.join(', ')}
+Cultural Themes: ${country.culturalThemes.join(', ')}
+Traditional Stories to Reference: ${country.traditionalStories.join(', ')}`
+    }
+  }
+
+  // Add specific cultural elements
+  if (input.culturalElements && input.culturalElements.length > 0) {
+    culturalContext += `\n\nINCLUDE THESE CULTURAL ELEMENTS:
+${input.culturalElements.map(e => `- ${e}`).join('\n')}`
+  }
+
+  // Add language integration
+  if (input.languagesIncluded && input.languagesIncluded.length > 0) {
+    culturalContext += `\n\nLANGUAGE INTEGRATION:
+Include authentic words or phrases from: ${input.languagesIncluded.join(', ')}
+- Provide pronunciation guides in parentheses
+- Include meaning/translation in context
+- Use respectfully and accurately`
+  }
+
+  return basePrompt + culturalContext
+}
+
+// =====================================================
+// AGE-APPROPRIATE CULTURAL DEPTH
+// =====================================================
+
+export function getCulturalDepthForAge(ageBand: AgeBand): string {
+  const schoolLevel = getSchoolLevel(ageBand)
+
+  switch (schoolLevel) {
+    case 'early_childhood':
+      return `CULTURAL DEPTH FOR YOUNG CHILDREN:
+- Focus on universal experiences: family, friends, food, play
+- Introduce simple cultural elements (greetings, foods, celebrations)
+- Use concrete, visual cultural markers
+- Keep explanations simple and joyful
+- Avoid complex historical or political contexts`
+
+    case 'elementary':
+      return `CULTURAL DEPTH FOR ELEMENTARY:
+- Introduce cultural practices and traditions
+- Explain "why" behind customs in simple terms
+- Compare and contrast with familiar experiences
+- Include vocabulary words from other languages
+- Begin exploring history at child-friendly level`
+
+    case 'middle_school':
+      return `CULTURAL DEPTH FOR MIDDLE SCHOOL:
+- Explore cultural identity and heritage
+- Address historical contexts appropriately
+- Discuss cultural exchange and globalization
+- Examine both challenges and celebrations
+- Encourage critical thinking about stereotypes`
+
+    case 'high_school':
+      return `CULTURAL DEPTH FOR HIGH SCHOOL:
+- Analyze cultural dynamics and power structures
+- Explore post-colonial perspectives
+- Discuss cultural preservation and change
+- Examine global interconnections
+- Encourage nuanced understanding of cultural complexity`
+
+    default:
+      return ''
+  }
+}
+
+// =====================================================
+// EXTENDED EMOTIONAL FOCUS FOR OLDER STUDENTS
+// =====================================================
+
+export const EXTENDED_EMOTIONAL_PROMPTS: Record<string, string> = {
+  // Original emotions (all ages)
+  ...EMOTIONAL_FOCUS_PROMPTS,
+
+  // Middle school additions
+  self_discovery: `Guide characters through authentic self-discovery journeys.
+Explore identity questions appropriate for adolescents without premature adult themes.`,
+
+  peer_pressure: `Address peer pressure dynamics realistically. Show characters
+making difficult choices and finding their own voice while valuing friendships.`,
+
+  academic_stress: `Acknowledge academic pressures while modeling healthy coping.
+Characters balance achievement with well-being and learn from setbacks.`,
+
+  social_dynamics: `Navigate complex social hierarchies with authenticity.
+Show characters building genuine connections beyond surface-level popularity.`,
+
+  // High school additions
+  ethical_reasoning: `Present genuine ethical dilemmas without easy answers.
+Characters grapple with competing values and develop moral reasoning.`,
+
+  social_responsibility: `Explore themes of civic engagement and community impact.
+Characters discover their ability to create positive change.`,
+
+  future_planning: `Address uncertainty about the future with hope and agency.
+Characters explore possibilities while managing anxiety about decisions.`,
+
+  global_awareness: `Develop understanding of global interconnectedness.
+Characters see their place in the wider world and their potential impact.`,
+
+  independence: `Navigate the transition toward adult independence.
+Characters take on new responsibilities while maintaining important connections.`,
+
+  cultural_identity: `Explore heritage, belonging, and cultural navigation.
+Characters integrate multiple aspects of their cultural background.`,
+}
+
+// =====================================================
+// ILLUSTRATION STYLE EXTENSIONS
+// =====================================================
+
+export const EXTENDED_ILLUSTRATION_STYLES: Record<string, string> = {
+  ...ILLUSTRATION_STYLE_PROMPTS,
+
+  // New styles for older readers
+  manga_anime: `Style: Manga/anime-influenced illustration.
+Characteristics: Expressive eyes, dynamic poses, action lines,
+panel-style compositions. Appeal to middle school and high school readers.
+Modern, energetic, character-focused.`,
+
+  graphic_novel: `Style: Graphic novel illustration.
+Characteristics: Bold lines, dramatic compositions, cinematic framing,
+sequential art influence. Sophisticated visual storytelling for older readers.
+Can handle complex themes with nuance.`,
+
+  realistic: `Style: Realistic illustration approach.
+Characteristics: Anatomically accurate, detailed environments,
+photo-realistic elements. Appropriate for historical fiction,
+biography, and serious themes. Professional quality.`,
+
+  digital_art: `Style: Contemporary digital art.
+Characteristics: Polished digital finish, vibrant colors,
+modern aesthetic, social media influenced. Appeals to teens,
+current and relatable visual language.`,
+
+  cultural_traditional: `Style: Traditional cultural art influences.
+Characteristics: Incorporate authentic artistic traditions
+from the story's cultural context. Research and honor
+traditional patterns, colors, and compositions.`,
+}
+
+// =====================================================
+// HELPER: GET PROMPTS FOR AGE BAND
+// =====================================================
+
+export function getCompletePromptsForAgeBand(ageBand: AgeBand): {
+  systemPrompt: string
+  safetyGuardrail: string
+  sightWords: string[]
+  appropriateCategories: StoryCategory[]
+} {
+  const config = AGE_BANDS[ageBand]
+
+  // Determine appropriate categories based on school level
+  const elementaryCategories: StoryCategory[] = [
+    'bedtime', 'seasonal', 'cultural', 'curriculum', 'emotional_social',
+    'school', 'family', 'adventure', 'world_cultures', 'geography_adventures',
+    'mythology_folklore', 'environmental', 'stem_stories',
+  ]
+
+  const middleSchoolCategories: StoryCategory[] = [
+    ...elementaryCategories, 'historical_fiction', 'global_citizenship',
+    'biography', 'coming_of_age',
+  ]
+
+  const highSchoolCategories: StoryCategory[] = [
+    ...middleSchoolCategories, 'social_issues',
+  ]
+
+  let appropriateCategories: StoryCategory[]
+  switch (config.schoolLevel) {
+    case 'early_childhood':
+    case 'elementary':
+      appropriateCategories = elementaryCategories
+      break
+    case 'middle_school':
+      appropriateCategories = middleSchoolCategories
+      break
+    case 'high_school':
+      appropriateCategories = highSchoolCategories
+      break
+    default:
+      appropriateCategories = elementaryCategories
+  }
+
+  return {
+    systemPrompt: AGE_BAND_SYSTEM_PROMPTS[ageBand],
+    safetyGuardrail: CONTENT_SAFETY_GUARDRAIL,
+    sightWords: SIGHT_WORDS_BY_LEVEL[ageBand],
+    appropriateCategories,
   }
 }

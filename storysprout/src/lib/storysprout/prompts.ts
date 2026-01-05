@@ -1448,3 +1448,55 @@ export function getCompletePromptsForAgeBand(ageBand: AgeBand): {
     appropriateCategories,
   }
 }
+
+// =====================================================
+// ADDITIONAL HELPER FUNCTIONS FOR STORY GENERATION
+// =====================================================
+
+/**
+ * Get the system prompt for a specific age band
+ */
+export function getSystemPromptForAge(ageBand: AgeBand): string {
+  return AGE_BAND_SYSTEM_PROMPTS[ageBand]
+}
+
+/**
+ * Get category-specific system prompt additions
+ */
+export function getCategorySystemPrompt(category: StoryCategory): string {
+  const categoryThemes = CATEGORY_THEMES[category]
+  if (!categoryThemes) {
+    return ''
+  }
+
+  const categoryDescriptions: Record<StoryCategory, string> = {
+    bedtime: 'Create a calming, soothing story perfect for bedtime. Use gentle imagery, soft tones, and a peaceful resolution.',
+    seasonal: 'Focus on the current season or upcoming holiday. Include sensory details about weather, activities, and traditions.',
+    cultural: 'Celebrate cultural diversity with authentic representation. Include cultural elements respectfully and accurately.',
+    curriculum: 'Align with educational standards. Include learning objectives while maintaining engagement.',
+    emotional_social: 'Focus on emotional intelligence and social skills. Model healthy emotional expression and social interactions.',
+    school: 'Center the story around school experiences. Include relatable classroom, playground, or school event scenarios.',
+    family: 'Celebrate family bonds and diverse family structures. Focus on love, support, and family traditions.',
+    adventure: 'Create an exciting journey with challenges to overcome. Focus on bravery, problem-solving, and discovery.',
+    world_cultures: 'Explore different cultures around the world. Include authentic cultural elements, traditions, and perspectives.',
+    geography_adventures: 'Take readers on a geographic journey. Include accurate geographic details and fun facts.',
+    historical_fiction: 'Bring history to life through storytelling. Balance historical accuracy with engaging narrative.',
+    mythology_folklore: 'Draw from traditional stories and mythology. Adapt tales appropriately for the target age.',
+    global_citizenship: 'Explore themes of global responsibility and interconnectedness. Encourage empathy for global issues.',
+    environmental: 'Focus on environmental themes and nature appreciation. Encourage environmental stewardship.',
+    stem_stories: 'Integrate science, technology, engineering, or math concepts. Make STEM accessible and exciting.',
+    biography: 'Tell inspiring stories of real people. Focus on character traits and achievements appropriate for the age.',
+    coming_of_age: 'Explore themes of growth, identity, and transition. Handle sensitive topics age-appropriately.',
+    social_issues: 'Address social issues thoughtfully. Provide age-appropriate context and encourage critical thinking.',
+  }
+
+  const description = categoryDescriptions[category] || ''
+  const themes = categoryThemes.join(', ')
+
+  return `
+CATEGORY: ${category.replace(/_/g, ' ').toUpperCase()}
+${description}
+
+Relevant themes to consider: ${themes}
+`
+}

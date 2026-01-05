@@ -1235,3 +1235,420 @@ export function getRecommendedCategories(ageBand: AgeBand): StoryCategory[] {
     cat => CATEGORIES[cat].recommendedAges.includes(schoolLevel)
   );
 }
+
+// =====================================================
+// MULTI-TENANCY TYPES (B2B School Support)
+// =====================================================
+
+export type OrganizationType =
+  | 'individual'       // B2C individual/family account
+  | 'school'           // Single school
+  | 'district'         // School district (multiple schools)
+  | 'homeschool_coop'  // Homeschool cooperative
+  | 'library'          // Public library
+  | 'nonprofit'        // Educational nonprofit
+  | 'enterprise';      // Large organization
+
+export type SubscriptionTier =
+  | 'free'             // Limited features
+  | 'family'           // Family subscription (B2C)
+  | 'classroom'        // Single classroom
+  | 'school'           // Whole school
+  | 'district'         // District-wide
+  | 'enterprise';      // Custom enterprise
+
+export type UserRole =
+  | 'parent'           // Parent/guardian (B2C)
+  | 'student'          // Student account
+  | 'teacher'          // Teacher
+  | 'school_admin'     // School administrator
+  | 'district_admin'   // District administrator
+  | 'content_creator'  // Story creator
+  | 'moderator'        // Content moderator
+  | 'super_admin';     // Platform admin
+
+export type ClassroomType =
+  | 'standard'         // Regular classroom
+  | 'special_ed'       // Special education
+  | 'ell'              // English Language Learners
+  | 'gifted'           // Gifted & talented
+  | 'mixed_grade'      // Multi-grade classroom
+  | 'intervention';    // Reading intervention
+
+// =====================================================
+// ORGANIZATION INTERFACES
+// =====================================================
+
+export interface Organization {
+  id: string;
+  name: string;
+  slug: string;
+  type: OrganizationType;
+
+  // Contact
+  email?: string;
+  phone?: string;
+  website?: string;
+
+  // Address
+  address_line1?: string;
+  address_line2?: string;
+  city?: string;
+  state_province?: string;
+  postal_code?: string;
+  country_code: string;
+
+  // Subscription
+  subscription_tier: SubscriptionTier;
+  subscription_started_at?: string;
+  subscription_expires_at?: string;
+  max_seats: number;
+  used_seats: number;
+
+  // Settings
+  settings: Record<string, unknown>;
+  content_policies: ContentPolicies;
+  allowed_categories: StoryCategory[];
+
+  // Branding
+  logo_url?: string;
+  primary_color: string;
+  secondary_color: string;
+
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ContentPolicies {
+  require_content_approval?: boolean;
+  blocked_themes?: string[];
+  max_story_complexity?: number;
+  allow_user_generated_stories?: boolean;
+  allow_ai_generation?: boolean;
+}
+
+export interface School {
+  id: string;
+  organization_id: string;
+  name: string;
+  school_code?: string;
+
+  // Contact
+  principal_name?: string;
+  email?: string;
+  phone?: string;
+
+  // Address
+  address_line1?: string;
+  city?: string;
+  state_province?: string;
+  postal_code?: string;
+
+  // Academic Info
+  grade_levels_served: AgeBand[];
+  student_count: number;
+  teacher_count: number;
+
+  settings: Record<string, unknown>;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface UserAccount {
+  id: string;
+  user_id: string;
+  organization_id?: string;
+  school_id?: string;
+
+  email: string;
+  full_name: string;
+  avatar_url?: string;
+  role: UserRole;
+
+  // For students
+  grade_level?: AgeBand;
+  student_id?: string;
+
+  permissions: UserPermissions;
+  last_login_at?: string;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface UserPermissions {
+  can_create_stories?: boolean;
+  can_approve_content?: boolean;
+  can_manage_users?: boolean;
+  can_view_analytics?: boolean;
+  can_manage_classrooms?: boolean;
+  can_assign_stories?: boolean;
+}
+
+export interface Classroom {
+  id: string;
+  school_id: string;
+  name: string;
+  class_code?: string;
+  classroom_type: ClassroomType;
+  grade_level: AgeBand;
+  academic_year?: string;
+
+  teacher_id?: string;
+  co_teacher_id?: string;
+
+  reading_goal_minutes_per_week: number;
+  allowed_categories?: StoryCategory[];
+  curriculum_standards?: string[];
+
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface Assignment {
+  id: string;
+  classroom_id: string;
+  created_by: string;
+
+  title: string;
+  description?: string;
+
+  story_id?: string;
+  category?: StoryCategory;
+  min_reading_time_minutes: number;
+
+  assigned_at: string;
+  due_at?: string;
+
+  questions?: ComprehensionQuestion[];
+  is_active: boolean;
+}
+
+export interface ComprehensionQuestion {
+  id: string;
+  question: string;
+  question_type: 'multiple_choice' | 'short_answer' | 'true_false';
+  options?: string[];
+  correct_answer?: string;
+  points: number;
+}
+
+export interface AssignmentSubmission {
+  id: string;
+  assignment_id: string;
+  student_id: string;
+
+  story_id?: string;
+  started_at?: string;
+  completed_at?: string;
+  reading_time_seconds: number;
+
+  answers: Record<string, string>;
+  score?: number;
+
+  teacher_feedback?: string;
+  reviewed_at?: string;
+  reviewed_by?: string;
+}
+
+export interface CurriculumStandard {
+  id: string;
+  standard_code: string;
+  framework: string;
+  grade_level: AgeBand;
+  subject: string;
+  domain?: string;
+  description: string;
+  related_categories: StoryCategory[];
+}
+
+// =====================================================
+// SUBSCRIPTION & PRICING
+// =====================================================
+
+export const SUBSCRIPTION_TIERS: Record<SubscriptionTier, {
+  name: string;
+  price_monthly?: number;
+  price_annual?: number;
+  max_users: number;
+  features: string[];
+}> = {
+  free: {
+    name: 'Free',
+    max_users: 2,
+    features: [
+      '5 stories per month',
+      'Basic categories only',
+      'No audio narration',
+      'Community stories',
+    ],
+  },
+  family: {
+    name: 'Family',
+    price_monthly: 9.99,
+    price_annual: 99,
+    max_users: 6,
+    features: [
+      'Unlimited stories',
+      'All categories',
+      'Audio narration',
+      'Progress tracking',
+      'Custom characters',
+      'Offline reading',
+    ],
+  },
+  classroom: {
+    name: 'Classroom',
+    price_monthly: 29.99,
+    price_annual: 299,
+    max_users: 35,
+    features: [
+      'Everything in Family',
+      'Classroom management',
+      'Assignment creation',
+      'Student progress reports',
+      'Curriculum alignment',
+    ],
+  },
+  school: {
+    name: 'School',
+    price_annual: 2999,
+    max_users: 500,
+    features: [
+      'Everything in Classroom',
+      'Unlimited classrooms',
+      'School-wide analytics',
+      'Admin dashboard',
+      'Priority support',
+      'Custom branding',
+    ],
+  },
+  district: {
+    name: 'District',
+    price_annual: 14999,
+    max_users: 5000,
+    features: [
+      'Everything in School',
+      'Multiple schools',
+      'District analytics',
+      'SSO integration',
+      'LMS integration',
+      'Dedicated support',
+      'Custom content creation',
+    ],
+  },
+  enterprise: {
+    name: 'Enterprise',
+    max_users: -1, // Unlimited
+    features: [
+      'Everything in District',
+      'Unlimited users',
+      'White-label option',
+      'API access',
+      'Custom development',
+      'SLA guarantee',
+    ],
+  },
+};
+
+// =====================================================
+// ROLE PERMISSIONS MATRIX
+// =====================================================
+
+export const ROLE_PERMISSIONS: Record<UserRole, UserPermissions> = {
+  parent: {
+    can_create_stories: false,
+    can_approve_content: false,
+    can_manage_users: false,
+    can_view_analytics: true,
+    can_manage_classrooms: false,
+    can_assign_stories: false,
+  },
+  student: {
+    can_create_stories: false,
+    can_approve_content: false,
+    can_manage_users: false,
+    can_view_analytics: false,
+    can_manage_classrooms: false,
+    can_assign_stories: false,
+  },
+  teacher: {
+    can_create_stories: true,
+    can_approve_content: false,
+    can_manage_users: false,
+    can_view_analytics: true,
+    can_manage_classrooms: true,
+    can_assign_stories: true,
+  },
+  school_admin: {
+    can_create_stories: true,
+    can_approve_content: true,
+    can_manage_users: true,
+    can_view_analytics: true,
+    can_manage_classrooms: true,
+    can_assign_stories: true,
+  },
+  district_admin: {
+    can_create_stories: true,
+    can_approve_content: true,
+    can_manage_users: true,
+    can_view_analytics: true,
+    can_manage_classrooms: true,
+    can_assign_stories: true,
+  },
+  content_creator: {
+    can_create_stories: true,
+    can_approve_content: false,
+    can_manage_users: false,
+    can_view_analytics: false,
+    can_manage_classrooms: false,
+    can_assign_stories: false,
+  },
+  moderator: {
+    can_create_stories: false,
+    can_approve_content: true,
+    can_manage_users: false,
+    can_view_analytics: true,
+    can_manage_classrooms: false,
+    can_assign_stories: false,
+  },
+  super_admin: {
+    can_create_stories: true,
+    can_approve_content: true,
+    can_manage_users: true,
+    can_view_analytics: true,
+    can_manage_classrooms: true,
+    can_assign_stories: true,
+  },
+};
+
+// =====================================================
+// HELPER FUNCTIONS FOR MULTI-TENANCY
+// =====================================================
+
+export function canUserPerform(role: UserRole, action: keyof UserPermissions): boolean {
+  return ROLE_PERMISSIONS[role][action] ?? false;
+}
+
+export function getSchoolLevelsForGrades(grades: AgeBand[]): SchoolLevel[] {
+  const levels = new Set<SchoolLevel>();
+  grades.forEach(grade => {
+    levels.add(AGE_BANDS[grade].schoolLevel);
+  });
+  return Array.from(levels);
+}
+
+export function isSubscriptionActive(org: Organization): boolean {
+  if (org.subscription_tier === 'free') return true;
+  if (!org.subscription_expires_at) return false;
+  return new Date(org.subscription_expires_at) > new Date();
+}
+
+export function hasSeatsAvailable(org: Organization): boolean {
+  const tier = SUBSCRIPTION_TIERS[org.subscription_tier];
+  if (tier.max_users === -1) return true; // Unlimited
+  return org.used_seats < tier.max_users;
+}

@@ -21,6 +21,20 @@ import {
   FEATURED_COUNTRIES,
   AGE_BANDS,
   getSchoolLevel,
+  CoreValue,
+  SocialSkill,
+  EmotionalSkill,
+  BehaviorLesson,
+  StoryLearningOutcomes,
+  ValueLesson,
+  SocialSkillLesson,
+  EmotionalSkillLesson,
+  VocabularyWord,
+  SightWordEntry,
+  getValuesForAgeBand,
+  getSocialSkillsForSchoolLevel,
+  getRecommendedValuesForCategory,
+  VALUE_AGE_APPROPRIATENESS,
 } from './types'
 
 // =====================================================
@@ -575,6 +589,32 @@ export interface StoryGenerationInput {
   colorPalette?: string
 }
 
+/**
+ * Extended story generation input with learning outcomes targeting
+ */
+export interface StoryGenerationInputWithLearning extends StoryGenerationInput {
+  // Target values to teach
+  targetValues?: CoreValue[]
+  primaryValue?: CoreValue
+
+  // Target skills to develop
+  targetSocialSkills?: SocialSkill[]
+  targetEmotionalSkills?: EmotionalSkill[]
+
+  // Behavior lessons to model
+  targetBehaviors?: BehaviorLesson[]
+
+  // Curriculum alignment
+  curriculumStandards?: string[]
+
+  // Vocabulary targets
+  vocabularyWords?: string[]
+  vocabularyDifficulty?: 1 | 2 | 3 | 4 | 5
+
+  // Include learning outcomes in output
+  includeLearningOutcomes?: boolean
+}
+
 export function generateStoryPrompt(input: StoryGenerationInput): string {
   const systemPrompt = AGE_BAND_SYSTEM_PROMPTS[input.ageBand]
 
@@ -635,6 +675,338 @@ IMPORTANT GUIDELINES:
 5. Include the required sight words at least once each
 6. Ensure emotional themes are woven naturally into the narrative
 ${input.colorPalette ? `7. Illustrations should use a ${input.colorPalette} color palette` : ''}`
+}
+
+// =====================================================
+// ENHANCED STORY GENERATION WITH LEARNING OUTCOMES
+// =====================================================
+
+/**
+ * Generate a story prompt that includes learning outcomes extraction
+ */
+export function generateStoryPromptWithLearning(input: StoryGenerationInputWithLearning): string {
+  const systemPrompt = AGE_BAND_SYSTEM_PROMPTS[input.ageBand]
+  const schoolLevel = getSchoolLevel(input.ageBand)
+
+  // Get appropriate values and skills for this age
+  const appropriateValues = getValuesForAgeBand(input.ageBand)
+  const appropriateSocialSkills = getSocialSkillsForSchoolLevel(schoolLevel)
+  const recommendedValues = getRecommendedValuesForCategory(input.category)
+
+  // Determine target values (use provided or recommended)
+  const targetValues = input.targetValues?.length
+    ? input.targetValues
+    : recommendedValues.filter(v => appropriateValues.includes(v))
+
+  const primaryValue = input.primaryValue || targetValues[0] || 'kindness'
+
+  // Build learning objectives section
+  const learningObjectives = buildLearningObjectives(input, targetValues, appropriateSocialSkills)
+
+  return `${systemPrompt}
+
+${CONTENT_SAFETY_GUARDRAIL}
+
+---
+
+STORY REQUEST:
+
+Category: ${input.category}
+Theme: ${input.theme}
+Number of Pages: ${input.pageCount}
+${input.characterName ? `Main Character: ${input.characterName}` : ''}
+${input.characterDescription ? `Character Description: ${input.characterDescription}` : ''}
+${input.setting ? `Setting: ${input.setting}` : ''}
+
+EMOTIONAL FOCUS:
+${input.emotionalFocus.length > 0 ? input.emotionalFocus.map(e => `- ${e}`).join('\n') : '- general positive emotions'}
+
+REQUIRED SIGHT WORDS TO INCLUDE:
+${input.sightWords.length > 0 ? input.sightWords.join(', ') : 'Use age-appropriate sight words naturally'}
+
+---
+
+${learningObjectives}
+
+---
+
+OUTPUT FORMAT:
+
+Please generate a complete story with exactly ${input.pageCount} pages in the following JSON format:
+
+\`\`\`json
+{
+  "title": "Story Title",
+  "description": "A brief 1-2 sentence description for parents/teachers",
+  "pages": [
+    {
+      "page_number": 1,
+      "text_content": "The story text for this page",
+      "illustration_prompt": "Detailed description for DALL-E to generate the illustration",
+      "highlighted_words": ["sight", "words", "to", "highlight"],
+      "vocabulary_on_page": [
+        {
+          "word": "vocabulary_word",
+          "definition": "Simple definition",
+          "context": "How it's used in the sentence"
+        }
+      ]
+    }
+  ],
+  "reading_time_minutes": 5,
+  "word_count": 150,
+  "discussion_questions": [
+    "Question 1 for after reading?",
+    "Question 2 for after reading?"
+  ],
+  "learning_outcomes": {
+    "sight_words": [
+      {
+        "word": "the",
+        "frequency": 5,
+        "pages": [1, 2, 3, 4, 5]
+      }
+    ],
+    "vocabulary_words": [
+      {
+        "word": "example",
+        "definition": "A thing used to illustrate something",
+        "part_of_speech": "noun",
+        "difficulty_level": 2,
+        "context_sentence": "Here is an example of kindness."
+      }
+    ],
+    "value_lessons": [
+      {
+        "value": "${primaryValue}",
+        "lesson_summary": "Brief description of what the story teaches about this value",
+        "story_moment": "The specific scene or event that demonstrates this value",
+        "character_models": ["Character Name"],
+        "discussion_prompt": "A question to discuss this value with the child"
+      }
+    ],
+    "social_skills": [
+      {
+        "skill": "sharing_toys",
+        "demonstration": "How the skill is shown in the story",
+        "characters_involved": ["Character Name"],
+        "positive_outcome": "What good came from using this skill"
+      }
+    ],
+    "emotional_skills": [
+      {
+        "skill": "managing_anger",
+        "scenario": "The emotional situation in the story",
+        "strategy_shown": "The coping strategy demonstrated",
+        "outcome": "How the character felt after using the strategy"
+      }
+    ],
+    "behavior_lessons": ["bedtime_routine", "being_a_good_friend"],
+    "primary_value": "${primaryValue}",
+    "secondary_values": [${targetValues.slice(1, 4).map(v => `"${v}"`).join(', ')}],
+    "overall_difficulty": 2,
+    "reading_complexity": 2,
+    "concept_complexity": 2
+  }
+}
+\`\`\`
+
+IMPORTANT GUIDELINES:
+1. Each page's text should be appropriate length for the age band
+2. Sight words should appear naturally, not forced
+3. Illustration prompts should be detailed, child-safe, and match the story
+4. The story should have a clear beginning, middle, and end
+5. Include the required sight words at least once each
+6. Ensure emotional themes are woven naturally into the narrative
+7. VALUE LESSONS MUST be demonstrated through character actions, not stated directly
+8. Social and emotional skills should be modeled by characters organically
+9. Include at least ONE clear value lesson and ONE skill demonstration
+10. Learning outcomes should feel natural, not forced or preachy
+${input.colorPalette ? `11. Illustrations should use a ${input.colorPalette} color palette` : ''}`
+}
+
+/**
+ * Build the learning objectives section for the prompt
+ */
+function buildLearningObjectives(
+  input: StoryGenerationInputWithLearning,
+  targetValues: CoreValue[],
+  appropriateSocialSkills: SocialSkill[]
+): string {
+  const schoolLevel = getSchoolLevel(input.ageBand)
+
+  let objectives = `LEARNING OBJECTIVES:
+
+This story should naturally teach and reinforce the following learning outcomes.
+DO NOT be preachy or explicit - weave these lessons into the narrative through
+character actions, consequences, and emotional journeys.
+
+PRIMARY VALUE TO TEACH: ${input.primaryValue || targetValues[0] || 'kindness'}
+${VALUE_AGE_APPROPRIATENESS[input.primaryValue || targetValues[0] || 'kindness']?.description || ''}
+
+SECONDARY VALUES (include 1-2 naturally):
+${targetValues.slice(1, 4).map(v => `- ${v}: ${VALUE_AGE_APPROPRIATENESS[v]?.description || ''}`).join('\n')}
+`
+
+  // Add social skills targets
+  if (input.targetSocialSkills?.length) {
+    objectives += `
+SOCIAL SKILLS TO MODEL:
+${input.targetSocialSkills.map(s => `- ${s.replace(/_/g, ' ')}`).join('\n')}
+`
+  } else {
+    // Suggest appropriate skills
+    const suggestedSkills = appropriateSocialSkills.slice(0, 3)
+    objectives += `
+SUGGESTED SOCIAL SKILLS (include at least 1):
+${suggestedSkills.map(s => `- ${s.replace(/_/g, ' ')}`).join('\n')}
+`
+  }
+
+  // Add emotional skills targets
+  if (input.targetEmotionalSkills?.length) {
+    objectives += `
+EMOTIONAL SKILLS TO DEVELOP:
+${input.targetEmotionalSkills.map(s => `- ${s.replace(/_/g, ' ')}`).join('\n')}
+`
+  } else {
+    // Suggest based on emotional focus
+    objectives += `
+EMOTIONAL DEVELOPMENT:
+Show characters experiencing and appropriately managing emotions related to: ${input.emotionalFocus.join(', ') || 'general emotional growth'}
+`
+  }
+
+  // Add behavior lessons
+  if (input.targetBehaviors?.length) {
+    objectives += `
+BEHAVIOR LESSONS TO MODEL:
+${input.targetBehaviors.map(b => `- ${b.replace(/_/g, ' ')}`).join('\n')}
+`
+  }
+
+  // Add vocabulary targets
+  if (input.vocabularyWords?.length) {
+    objectives += `
+TARGET VOCABULARY WORDS TO INTRODUCE:
+${input.vocabularyWords.join(', ')}
+Vocabulary Difficulty Level: ${input.vocabularyDifficulty || 2}/5
+`
+  }
+
+  // Add curriculum standards
+  if (input.curriculumStandards?.length) {
+    objectives += `
+CURRICULUM STANDARDS TO ADDRESS:
+${input.curriculumStandards.map(s => `- ${s}`).join('\n')}
+`
+  }
+
+  // Add age-specific guidance
+  objectives += `
+AGE-APPROPRIATE GUIDANCE FOR ${schoolLevel.replace(/_/g, ' ').toUpperCase()}:
+`
+
+  switch (schoolLevel) {
+    case 'early_childhood':
+      objectives += `- Use very simple cause-and-effect for lessons
+- Show emotions through facial expressions and actions
+- Keep value demonstrations concrete and visual
+- Use repetition to reinforce lessons
+- Characters should be models to imitate`
+      break
+    case 'elementary':
+      objectives += `- Characters can verbalize their feelings and choices
+- Show natural consequences of behavior
+- Include moments of reflection after key events
+- Use dialogue to express values
+- Allow characters to make mistakes and learn`
+      break
+    case 'middle_school':
+      objectives += `- Present moral complexity without easy answers
+- Characters should face genuine dilemmas
+- Explore multiple perspectives on issues
+- Allow for nuanced understanding of values
+- Include peer dynamics and social pressure`
+      break
+    case 'high_school':
+      objectives += `- Address values in societal context
+- Explore ethical reasoning and consequences
+- Characters grapple with real-world complexity
+- Allow ambiguity and growth
+- Connect personal values to civic responsibility`
+      break
+  }
+
+  return objectives
+}
+
+/**
+ * Extract learning outcomes from generated story JSON
+ */
+export function parseLearningOutcomes(generatedStory: {
+  learning_outcomes?: Partial<StoryLearningOutcomes>
+  pages?: Array<{ vocabulary_on_page?: Array<{ word: string; definition: string; context: string }> }>
+  discussion_questions?: string[]
+}): Partial<StoryLearningOutcomes> {
+  if (!generatedStory.learning_outcomes) {
+    return {}
+  }
+
+  const outcomes = generatedStory.learning_outcomes
+
+  return {
+    sight_words: outcomes.sight_words || [],
+    sight_word_count: outcomes.sight_words?.reduce((sum, sw) => sum + (sw.frequency || 0), 0) || 0,
+    vocabulary_words: outcomes.vocabulary_words || [],
+    vocabulary_count: outcomes.vocabulary_words?.length || 0,
+    vocabulary_difficulty_avg: outcomes.vocabulary_words?.length
+      ? outcomes.vocabulary_words.reduce((sum, v) => sum + (v.difficulty_level || 2), 0) / outcomes.vocabulary_words.length
+      : 2,
+    value_lessons: outcomes.value_lessons || [],
+    primary_value: outcomes.primary_value,
+    secondary_values: outcomes.secondary_values || [],
+    social_skills: outcomes.social_skills || [],
+    emotional_skills: outcomes.emotional_skills || [],
+    behavior_lessons: outcomes.behavior_lessons || [],
+    curriculum_standards: outcomes.curriculum_standards || [],
+    comprehension_question_count: generatedStory.discussion_questions?.length || 0,
+    overall_difficulty: outcomes.overall_difficulty || 2,
+    reading_complexity: outcomes.reading_complexity || 2,
+    concept_complexity: outcomes.concept_complexity || 2,
+    generated_by: 'ai',
+  }
+}
+
+/**
+ * Get default learning targets for a story generation request
+ */
+export function getDefaultLearningTargets(
+  category: StoryCategory,
+  ageBand: AgeBand
+): Pick<StoryGenerationInputWithLearning, 'targetValues' | 'primaryValue' | 'targetSocialSkills' | 'targetEmotionalSkills'> {
+  const schoolLevel = getSchoolLevel(ageBand)
+  const recommendedValues = getRecommendedValuesForCategory(category)
+  const appropriateValues = getValuesForAgeBand(ageBand)
+  const appropriateSocialSkills = getSocialSkillsForSchoolLevel(schoolLevel)
+
+  // Filter recommended values to age-appropriate ones
+  const targetValues = recommendedValues.filter(v => appropriateValues.includes(v))
+
+  // Get emotional skills based on school level
+  const emotionalSkillsByLevel: Record<SchoolLevel, EmotionalSkill[]> = {
+    early_childhood: ['identifying_basic_emotions', 'naming_feelings', 'asking_for_comfort'],
+    elementary: ['expressing_feelings_appropriately', 'calming_down_strategies', 'managing_anger', 'coping_with_disappointment'],
+    middle_school: ['emotional_awareness', 'stress_management', 'growth_mindset', 'empathic_responding'],
+    high_school: ['emotional_intelligence', 'self_compassion', 'managing_complex_emotions', 'supporting_others_emotionally'],
+  }
+
+  return {
+    targetValues,
+    primaryValue: targetValues[0],
+    targetSocialSkills: appropriateSocialSkills.slice(0, 3),
+    targetEmotionalSkills: emotionalSkillsByLevel[schoolLevel]?.slice(0, 2) || [],
+  }
 }
 
 // =====================================================

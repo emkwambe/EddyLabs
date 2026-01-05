@@ -1652,3 +1652,449 @@ export function hasSeatsAvailable(org: Organization): boolean {
   if (tier.max_users === -1) return true; // Unlimited
   return org.used_seats < tier.max_users;
 }
+
+// =====================================================
+// STORY LEARNING OUTCOMES
+// =====================================================
+
+/**
+ * Core values that stories can teach
+ * Organized by developmental appropriateness
+ */
+export type CoreValue =
+  // Universal Values (All Ages)
+  | 'kindness'
+  | 'honesty'
+  | 'respect'
+  | 'responsibility'
+  | 'fairness'
+  | 'caring'
+  | 'gratitude'
+  | 'patience'
+  | 'courage'
+  | 'perseverance'
+  // Social Values (Ages 4+)
+  | 'sharing'
+  | 'cooperation'
+  | 'empathy'
+  | 'inclusion'
+  | 'friendship'
+  | 'forgiveness'
+  | 'generosity'
+  | 'helpfulness'
+  // Character Values (Ages 6+)
+  | 'integrity'
+  | 'humility'
+  | 'self_discipline'
+  | 'curiosity'
+  | 'creativity'
+  | 'optimism'
+  | 'resilience'
+  | 'adaptability'
+  // Advanced Values (Ages 10+)
+  | 'justice'
+  | 'citizenship'
+  | 'environmental_stewardship'
+  | 'cultural_appreciation'
+  | 'leadership'
+  | 'service'
+  | 'critical_thinking'
+  | 'self_reflection';
+
+/**
+ * Social skills that can be modeled in stories
+ */
+export type SocialSkill =
+  // Basic Social Skills (Ages 2-5)
+  | 'greeting_others'
+  | 'taking_turns'
+  | 'sharing_toys'
+  | 'saying_please_thank_you'
+  | 'following_rules'
+  | 'listening_to_others'
+  // Intermediate Social Skills (Ages 5-8)
+  | 'making_friends'
+  | 'joining_group_play'
+  | 'expressing_needs'
+  | 'accepting_differences'
+  | 'apologizing'
+  | 'giving_compliments'
+  | 'asking_for_help'
+  // Advanced Social Skills (Ages 8-12)
+  | 'conflict_resolution'
+  | 'perspective_taking'
+  | 'negotiation'
+  | 'standing_up_for_others'
+  | 'respectful_disagreement'
+  | 'active_listening'
+  | 'group_collaboration'
+  // Complex Social Skills (Ages 12+)
+  | 'leadership_skills'
+  | 'mentoring_others'
+  | 'public_speaking'
+  | 'cross_cultural_communication'
+  | 'advocacy'
+  | 'networking'
+  | 'mediation';
+
+/**
+ * Emotional skills/competencies that stories can develop
+ */
+export type EmotionalSkill =
+  // Emotion Recognition (Ages 2-5)
+  | 'identifying_basic_emotions'
+  | 'recognizing_facial_expressions'
+  | 'naming_feelings'
+  // Emotion Expression (Ages 4-7)
+  | 'expressing_feelings_appropriately'
+  | 'using_feeling_words'
+  | 'asking_for_comfort'
+  // Emotion Regulation (Ages 5-10)
+  | 'calming_down_strategies'
+  | 'managing_anger'
+  | 'coping_with_disappointment'
+  | 'handling_frustration'
+  | 'managing_excitement'
+  | 'dealing_with_fear'
+  // Advanced Emotional Skills (Ages 8+)
+  | 'emotional_awareness'
+  | 'empathic_responding'
+  | 'delayed_gratification'
+  | 'stress_management'
+  | 'growth_mindset'
+  // Complex Emotional Skills (Ages 12+)
+  | 'emotional_intelligence'
+  | 'self_compassion'
+  | 'managing_complex_emotions'
+  | 'supporting_others_emotionally'
+  | 'resilience_building';
+
+/**
+ * Behavior patterns that stories can model
+ */
+export type BehaviorLesson =
+  // Daily Life Behaviors
+  | 'morning_routine'
+  | 'bedtime_routine'
+  | 'healthy_eating'
+  | 'personal_hygiene'
+  | 'organization'
+  | 'time_management'
+  // Safety Behaviors
+  | 'stranger_safety'
+  | 'internet_safety'
+  | 'physical_safety'
+  | 'asking_trusted_adult'
+  // Academic Behaviors
+  | 'doing_homework'
+  | 'paying_attention'
+  | 'trying_new_things'
+  | 'learning_from_mistakes'
+  | 'asking_questions'
+  | 'practicing_skills'
+  // Relationship Behaviors
+  | 'being_a_good_friend'
+  | 'respecting_boundaries'
+  | 'including_others'
+  | 'handling_peer_pressure'
+  // Environmental Behaviors
+  | 'caring_for_pets'
+  | 'respecting_nature'
+  | 'reducing_waste'
+  | 'conserving_resources';
+
+/**
+ * Configuration for values by age appropriateness
+ */
+export const VALUE_AGE_APPROPRIATENESS: Record<CoreValue, { minAge: number; maxAge: number; description: string }> = {
+  // Universal Values
+  kindness: { minAge: 2, maxAge: 18, description: 'Being nice and helpful to others' },
+  honesty: { minAge: 2, maxAge: 18, description: 'Telling the truth and being trustworthy' },
+  respect: { minAge: 2, maxAge: 18, description: 'Treating others well and valuing them' },
+  responsibility: { minAge: 3, maxAge: 18, description: 'Taking care of duties and obligations' },
+  fairness: { minAge: 3, maxAge: 18, description: 'Treating everyone equally and justly' },
+  caring: { minAge: 2, maxAge: 18, description: 'Showing concern for others\' wellbeing' },
+  gratitude: { minAge: 3, maxAge: 18, description: 'Being thankful and appreciative' },
+  patience: { minAge: 3, maxAge: 18, description: 'Waiting calmly and not rushing' },
+  courage: { minAge: 4, maxAge: 18, description: 'Being brave despite fear' },
+  perseverance: { minAge: 4, maxAge: 18, description: 'Keeping going despite challenges' },
+  // Social Values
+  sharing: { minAge: 2, maxAge: 10, description: 'Giving part of what you have to others' },
+  cooperation: { minAge: 3, maxAge: 18, description: 'Working together with others' },
+  empathy: { minAge: 4, maxAge: 18, description: 'Understanding and sharing others\' feelings' },
+  inclusion: { minAge: 4, maxAge: 18, description: 'Making sure everyone belongs' },
+  friendship: { minAge: 3, maxAge: 18, description: 'Building and maintaining friendships' },
+  forgiveness: { minAge: 5, maxAge: 18, description: 'Letting go of anger toward others' },
+  generosity: { minAge: 4, maxAge: 18, description: 'Giving freely to others' },
+  helpfulness: { minAge: 3, maxAge: 18, description: 'Assisting others when needed' },
+  // Character Values
+  integrity: { minAge: 7, maxAge: 18, description: 'Doing the right thing even when no one is watching' },
+  humility: { minAge: 6, maxAge: 18, description: 'Being modest and not boastful' },
+  self_discipline: { minAge: 6, maxAge: 18, description: 'Controlling impulses and staying focused' },
+  curiosity: { minAge: 2, maxAge: 18, description: 'Wanting to learn and explore' },
+  creativity: { minAge: 2, maxAge: 18, description: 'Using imagination to create new things' },
+  optimism: { minAge: 4, maxAge: 18, description: 'Having a positive outlook' },
+  resilience: { minAge: 5, maxAge: 18, description: 'Bouncing back from setbacks' },
+  adaptability: { minAge: 5, maxAge: 18, description: 'Adjusting to new situations' },
+  // Advanced Values
+  justice: { minAge: 10, maxAge: 18, description: 'Fairness in how people are treated by society' },
+  citizenship: { minAge: 10, maxAge: 18, description: 'Being a responsible community member' },
+  environmental_stewardship: { minAge: 6, maxAge: 18, description: 'Taking care of our planet' },
+  cultural_appreciation: { minAge: 6, maxAge: 18, description: 'Valuing diverse cultures' },
+  leadership: { minAge: 8, maxAge: 18, description: 'Guiding and inspiring others' },
+  service: { minAge: 6, maxAge: 18, description: 'Helping the community' },
+  critical_thinking: { minAge: 10, maxAge: 18, description: 'Analyzing and evaluating information' },
+  self_reflection: { minAge: 10, maxAge: 18, description: 'Thinking about one\'s own thoughts and actions' },
+};
+
+/**
+ * A single value lesson embedded in a story
+ */
+export interface ValueLesson {
+  value: CoreValue;
+  lesson_summary: string;          // Brief description of what is taught
+  story_moment: string;            // Where/how it's demonstrated in the story
+  character_models: string[];      // Which characters model this value
+  discussion_prompt?: string;      // Optional question for discussion
+}
+
+/**
+ * A single social skill lesson in a story
+ */
+export interface SocialSkillLesson {
+  skill: SocialSkill;
+  demonstration: string;           // How the skill is shown
+  characters_involved: string[];
+  positive_outcome: string;        // What good comes from using this skill
+}
+
+/**
+ * A single emotional skill lesson in a story
+ */
+export interface EmotionalSkillLesson {
+  skill: EmotionalSkill;
+  scenario: string;                // The emotional situation presented
+  strategy_shown: string;          // The coping/handling strategy demonstrated
+  outcome: string;                 // The emotional resolution
+}
+
+/**
+ * Vocabulary word with learning metadata
+ */
+export interface VocabularyWord {
+  word: string;
+  definition: string;
+  pronunciation?: string;
+  part_of_speech: 'noun' | 'verb' | 'adjective' | 'adverb' | 'other';
+  difficulty_level: 1 | 2 | 3 | 4 | 5;  // 1=easiest, 5=most challenging
+  grade_level: AgeBand;
+  context_sentence: string;        // How it's used in the story
+  synonyms?: string[];
+  root_word?: string;              // Etymology for older readers
+}
+
+/**
+ * Sight word with tracking metadata
+ */
+export interface SightWordEntry {
+  word: string;
+  frequency: number;               // How many times it appears
+  grade_level: AgeBand;            // Appropriate grade level
+  positions: number[];             // Page numbers where it appears
+}
+
+/**
+ * Complete learning outcomes for a story
+ */
+export interface StoryLearningOutcomes {
+  story_id: string;
+
+  // Vocabulary Learning
+  sight_words: SightWordEntry[];
+  sight_word_count: number;
+  vocabulary_words: VocabularyWord[];
+  vocabulary_count: number;
+  vocabulary_difficulty_avg: number;  // Average difficulty 1-5
+
+  // Value/Character Lessons
+  value_lessons: ValueLesson[];
+  primary_value: CoreValue;           // Main value taught
+  secondary_values: CoreValue[];      // Supporting values
+
+  // Social Skills
+  social_skills: SocialSkillLesson[];
+
+  // Emotional Skills
+  emotional_skills: EmotionalSkillLesson[];
+
+  // Behavior Modeling
+  behavior_lessons: BehaviorLesson[];
+
+  // Curriculum Alignment
+  curriculum_standards: {
+    code: string;
+    framework: string;              // e.g., 'Common Core', 'NGSS', 'SEL'
+    description: string;
+  }[];
+
+  // Learning Metrics
+  estimated_learning_time_minutes: number;
+  recommended_discussion_time_minutes: number;
+  comprehension_question_count: number;
+
+  // Difficulty Scoring
+  overall_difficulty: 1 | 2 | 3 | 4 | 5;
+  reading_complexity: 1 | 2 | 3 | 4 | 5;
+  concept_complexity: 1 | 2 | 3 | 4 | 5;
+
+  // Metadata
+  created_at: string;
+  updated_at: string;
+  generated_by: 'ai' | 'human' | 'hybrid';
+}
+
+/**
+ * Summary of learning outcomes for analytics
+ */
+export interface LearningOutcomesSummary {
+  total_sight_words_introduced: number;
+  total_vocabulary_words: number;
+  values_covered: CoreValue[];
+  social_skills_covered: SocialSkill[];
+  emotional_skills_covered: EmotionalSkill[];
+  curriculum_standards_met: string[];
+  average_difficulty: number;
+}
+
+/**
+ * Child's progress on learning outcomes
+ */
+export interface ChildLearningProgress {
+  child_id: string;
+
+  // Vocabulary Mastery
+  sight_words_mastered: number;
+  sight_words_in_progress: number;
+  vocabulary_words_learned: number;
+
+  // Values Exposure
+  values_encountered: { value: CoreValue; exposure_count: number; stories: string[] }[];
+
+  // Skills Development
+  social_skills_practiced: { skill: SocialSkill; practice_count: number }[];
+  emotional_skills_practiced: { skill: EmotionalSkill; practice_count: number }[];
+
+  // Standards Progress
+  curriculum_standards_progress: { code: string; stories_completed: number }[];
+
+  // Overall Metrics
+  total_stories_with_outcomes: number;
+  learning_streak_days: number;
+  last_learning_activity: string;
+}
+
+// =====================================================
+// HELPER FUNCTIONS FOR LEARNING OUTCOMES
+// =====================================================
+
+/**
+ * Get values appropriate for an age band
+ */
+export function getValuesForAgeBand(ageBand: AgeBand): CoreValue[] {
+  const config = AGE_BANDS[ageBand];
+  const minAge = config.ageRange[0];
+  const maxAge = config.ageRange[1];
+
+  return (Object.keys(VALUE_AGE_APPROPRIATENESS) as CoreValue[]).filter(value => {
+    const valueConfig = VALUE_AGE_APPROPRIATENESS[value];
+    return valueConfig.minAge <= maxAge && valueConfig.maxAge >= minAge;
+  });
+}
+
+/**
+ * Get social skills appropriate for a school level
+ */
+export function getSocialSkillsForSchoolLevel(level: SchoolLevel): SocialSkill[] {
+  const skillsByLevel: Record<SchoolLevel, SocialSkill[]> = {
+    early_childhood: [
+      'greeting_others', 'taking_turns', 'sharing_toys',
+      'saying_please_thank_you', 'following_rules', 'listening_to_others'
+    ],
+    elementary: [
+      'greeting_others', 'taking_turns', 'sharing_toys', 'saying_please_thank_you',
+      'following_rules', 'listening_to_others', 'making_friends', 'joining_group_play',
+      'expressing_needs', 'accepting_differences', 'apologizing', 'giving_compliments',
+      'asking_for_help', 'conflict_resolution', 'perspective_taking', 'negotiation',
+      'standing_up_for_others', 'respectful_disagreement', 'active_listening', 'group_collaboration'
+    ],
+    middle_school: [
+      'conflict_resolution', 'perspective_taking', 'negotiation', 'standing_up_for_others',
+      'respectful_disagreement', 'active_listening', 'group_collaboration',
+      'leadership_skills', 'mentoring_others', 'public_speaking', 'cross_cultural_communication'
+    ],
+    high_school: [
+      'conflict_resolution', 'perspective_taking', 'negotiation', 'standing_up_for_others',
+      'respectful_disagreement', 'active_listening', 'group_collaboration',
+      'leadership_skills', 'mentoring_others', 'public_speaking',
+      'cross_cultural_communication', 'advocacy', 'networking', 'mediation'
+    ],
+  };
+
+  return skillsByLevel[level];
+}
+
+/**
+ * Calculate learning outcome score for a story
+ */
+export function calculateLearningScore(outcomes: StoryLearningOutcomes): number {
+  let score = 0;
+
+  // Vocabulary contribution (up to 25 points)
+  score += Math.min(outcomes.sight_word_count * 2, 15);
+  score += Math.min(outcomes.vocabulary_count * 2, 10);
+
+  // Values contribution (up to 25 points)
+  score += outcomes.value_lessons.length * 5;
+  score = Math.min(score, 50); // Cap at 50 so far
+
+  // Social skills contribution (up to 15 points)
+  score += outcomes.social_skills.length * 5;
+  score = Math.min(score, 65);
+
+  // Emotional skills contribution (up to 15 points)
+  score += outcomes.emotional_skills.length * 5;
+  score = Math.min(score, 80);
+
+  // Curriculum alignment (up to 20 points)
+  score += outcomes.curriculum_standards.length * 5;
+
+  return Math.min(score, 100);
+}
+
+/**
+ * Get recommended values for a story category
+ */
+export function getRecommendedValuesForCategory(category: StoryCategory): CoreValue[] {
+  const categoryValues: Record<StoryCategory, CoreValue[]> = {
+    bedtime: ['gratitude', 'caring', 'patience'],
+    seasonal: ['gratitude', 'generosity', 'cultural_appreciation'],
+    cultural: ['cultural_appreciation', 'respect', 'empathy', 'inclusion'],
+    curriculum: ['curiosity', 'perseverance', 'critical_thinking'],
+    emotional_social: ['empathy', 'kindness', 'resilience', 'self_reflection'],
+    school: ['responsibility', 'cooperation', 'perseverance', 'curiosity'],
+    family: ['caring', 'respect', 'gratitude', 'responsibility'],
+    adventure: ['courage', 'perseverance', 'curiosity', 'adaptability'],
+    world_cultures: ['cultural_appreciation', 'respect', 'empathy', 'inclusion'],
+    geography_adventures: ['curiosity', 'environmental_stewardship', 'cultural_appreciation'],
+    historical_fiction: ['courage', 'justice', 'perseverance', 'leadership'],
+    mythology_folklore: ['courage', 'honesty', 'respect', 'cultural_appreciation'],
+    global_citizenship: ['citizenship', 'justice', 'service', 'environmental_stewardship'],
+    environmental: ['environmental_stewardship', 'responsibility', 'caring'],
+    stem_stories: ['curiosity', 'perseverance', 'creativity', 'critical_thinking'],
+    biography: ['perseverance', 'courage', 'leadership', 'integrity'],
+    coming_of_age: ['self_reflection', 'resilience', 'integrity', 'courage'],
+    social_issues: ['justice', 'empathy', 'citizenship', 'courage'],
+  };
+
+  return categoryValues[category] || ['kindness', 'respect', 'empathy'];
+}

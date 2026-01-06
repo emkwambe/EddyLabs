@@ -1872,3 +1872,366 @@ ${description}
 Relevant themes to consider: ${themes}
 `
 }
+
+// =====================================================
+// BIOGRAPHY-SPECIFIC PROMPT GENERATION
+// =====================================================
+
+import {
+  BiographySubjectType,
+  BiographyFigure,
+  BIOGRAPHY_SUBJECTS,
+  CURATED_BIOGRAPHY_FIGURES,
+  getCuratedFiguresForAge,
+  getBiographySubjectsForAge,
+} from './types'
+
+import {
+  generateBiographySafetyWrapper,
+  BIOGRAPHY_PROHIBITED_TOPICS,
+  BIOGRAPHY_SENSITIVE_TOPICS,
+} from './content-safety'
+
+/**
+ * Input for biography story generation
+ */
+export interface BiographyStoryInput {
+  figureName: string
+  subjectType: BiographySubjectType
+  ageBand: AgeBand
+  childName?: string
+  focusAspect?: string // e.g., 'childhood', 'achievements', 'challenges overcome'
+  targetValues?: CoreValue[]
+  includeQuotes?: boolean
+  storyLength?: 'short' | 'medium' | 'long'
+  illustrationStyle?: string
+}
+
+/**
+ * Generate a biography story prompt with full guardrails
+ */
+export function generateBiographyPrompt(input: BiographyStoryInput): {
+  isAllowed: boolean
+  prompt: string
+  warnings: string[]
+  suggestedAlternatives?: BiographyFigure[]
+} {
+  const {
+    figureName,
+    subjectType,
+    ageBand,
+    childName,
+    focusAspect = 'achievements',
+    targetValues = [],
+    includeQuotes = false,
+    storyLength = 'medium',
+  } = input
+
+  // Get safety wrapper
+  const safetyWrapper = generateBiographySafetyWrapper(figureName, subjectType, ageBand)
+  const warnings: string[] = []
+
+  if (!safetyWrapper.isAllowed) {
+    // Get suggested alternatives
+    const suggestedAlternatives = getCuratedFiguresForAge(ageBand)
+      .filter(f => f.subjectType === subjectType ||
+        BIOGRAPHY_SUBJECTS[f.subjectType].sensitivity === 'safe')
+      .slice(0, 5)
+
+    return {
+      isAllowed: false,
+      prompt: '',
+      warnings: [
+        `"${figureName}" as ${subjectType} is not appropriate for ${ageBand}.`,
+        ...safetyWrapper.avoidTopics.slice(0, 3).map(t => `Avoid topic: ${t}`),
+      ],
+      suggestedAlternatives,
+    }
+  }
+
+  // Check if figure is in curated list for additional guidance
+  const curatedFigure = CURATED_BIOGRAPHY_FIGURES.find(
+    f => f.name.toLowerCase() === figureName.toLowerCase()
+  )
+
+  // Get age band config
+  const ageBandConfig = AGE_BANDS[ageBand]
+
+  // Determine word count based on story length and age
+  let wordCount: { min: number; max: number }
+  switch (storyLength) {
+    case 'short':
+      wordCount = ageBandConfig.minAge < 6
+        ? { min: 150, max: 300 }
+        : ageBandConfig.minAge < 10
+          ? { min: 300, max: 500 }
+          : { min: 400, max: 700 }
+      break
+    case 'long':
+      wordCount = ageBandConfig.minAge < 6
+        ? { min: 400, max: 600 }
+        : ageBandConfig.minAge < 10
+          ? { min: 700, max: 1000 }
+          : { min: 1000, max: 1500 }
+      break
+    default: // medium
+      wordCount = ageBandConfig.minAge < 6
+        ? { min: 250, max: 400 }
+        : ageBandConfig.minAge < 10
+          ? { min: 500, max: 750 }
+          : { min: 750, max: 1000 }
+  }
+
+  // Build character traits to emphasize
+  const characterTraits = curatedFigure
+    ? curatedFigure.characterTraits
+    : targetValues.length > 0
+      ? targetValues
+      : ['perseverance', 'courage', 'kindness'] as CoreValue[]
+
+  // Build the prompt
+  const prompt = `
+${safetyWrapper.safetyInstructions}
+
+---
+
+BIOGRAPHY STORY REQUEST:
+
+Create an inspiring, age-appropriate biography story about ${figureName}.
+
+TARGET AUDIENCE:
+- Age Band: ${ageBand} (${ageBandConfig.label}, ages ${ageBandConfig.minAge}-${ageBandConfig.maxAge})
+- Reading Level: ${ageBandConfig.readingLevel}
+${childName ? `- Personalization: Address or reference "${childName}" where natural` : ''}
+
+FIGURE INFORMATION:
+- Name: ${figureName}
+- Subject Type: ${BIOGRAPHY_SUBJECTS[subjectType].label}
+${curatedFigure ? `
+- Nationality: ${curatedFigure.nationality}
+- Era: ${curatedFigure.era}
+- Key Achievements: ${curatedFigure.keyAchievements.join(', ')}
+` : ''}
+
+STORY FOCUS:
+- Primary Focus: ${focusAspect}
+- Character Traits to Emphasize: ${characterTraits.join(', ')}
+- Focus Areas: ${safetyWrapper.focusAreas.join(', ')}
+
+STORY REQUIREMENTS:
+- Length: ${wordCount.min}-${wordCount.max} words
+- Structure: Beginning (introduction), Middle (challenges/achievements), End (lesson/inspiration)
+- Tone: Inspiring, age-appropriate, engaging
+- Vocabulary: Match ${ageBandConfig.readingLevel} reading level
+${includeQuotes ? '- Include 1-2 famous quotes from the figure (paraphrased simply for young readers)' : ''}
+
+TOPICS TO STRICTLY AVOID:
+${safetyWrapper.avoidTopics.slice(0, 8).map(t => `- ${t}`).join('\n')}
+
+${safetyWrapper.disclaimer ? `
+DISCLAIMER TO INCLUDE:
+${safetyWrapper.disclaimer}
+` : ''}
+
+EDUCATIONAL ELEMENTS TO INCLUDE:
+- One key lesson about ${characterTraits[0]}
+- Age-appropriate historical context (if applicable)
+- How the figure's work helps others
+- What young readers can learn from this person
+
+OUTPUT FORMAT:
+Provide the story in the following JSON structure:
+{
+  "title": "Story title",
+  "subtitle": "Brief tagline",
+  "story_content": [
+    {
+      "page": 1,
+      "text": "Page text...",
+      "illustration_prompt": "Age-appropriate illustration description"
+    }
+  ],
+  "key_lesson": "The main takeaway for young readers",
+  "vocabulary_words": ["word1", "word2"],
+  "character_traits_shown": ["trait1", "trait2"],
+  "discussion_questions": ["question1", "question2"]
+}
+`.trim()
+
+  return {
+    isAllowed: true,
+    prompt,
+    warnings,
+  }
+}
+
+/**
+ * Get biography figure recommendations for a child
+ */
+export function getBiographyRecommendations(
+  ageBand: AgeBand,
+  interests?: string[],
+  previousFigures?: string[]
+): {
+  recommended: BiographyFigure[]
+  byCategory: Record<BiographySubjectType, BiographyFigure[]>
+} {
+  const availableFigures = getCuratedFiguresForAge(ageBand)
+  const previousSet = new Set((previousFigures || []).map(f => f.toLowerCase()))
+
+  // Filter out previously read
+  const newFigures = availableFigures.filter(
+    f => !previousSet.has(f.name.toLowerCase())
+  )
+
+  // Score figures based on interests
+  const scoredFigures = newFigures.map(figure => {
+    let score = 0
+
+    // Base score for safe figures
+    if (figure.safeForYoungest) score += 10
+
+    // Interest matching
+    if (interests) {
+      for (const interest of interests) {
+        const lowerInterest = interest.toLowerCase()
+        if (figure.focusAreas.some(f => f.toLowerCase().includes(lowerInterest))) {
+          score += 5
+        }
+        if (figure.keyAchievements.some(a => a.toLowerCase().includes(lowerInterest))) {
+          score += 3
+        }
+      }
+    }
+
+    // Diversity bonus - prefer variety in subject types
+    score += Math.random() * 2 // Small random factor for variety
+
+    return { figure, score }
+  })
+
+  // Sort by score
+  scoredFigures.sort((a, b) => b.score - a.score)
+
+  // Group by category
+  const byCategory: Record<BiographySubjectType, BiographyFigure[]> = {} as any
+  const allowedTypes = getBiographySubjectsForAge(ageBand)
+
+  for (const type of allowedTypes) {
+    byCategory[type] = newFigures.filter(f => f.subjectType === type)
+  }
+
+  return {
+    recommended: scoredFigures.slice(0, 10).map(s => s.figure),
+    byCategory,
+  }
+}
+
+/**
+ * Generate a "Meet [Figure]" introductory prompt for youngest readers
+ */
+export function generateYoungReaderBiographyPrompt(
+  figure: BiographyFigure,
+  childName?: string
+): string {
+  if (!figure.safeForYoungest) {
+    throw new Error(`${figure.name} is not safe for youngest readers`)
+  }
+
+  return `
+CONTENT SAFETY: This is for Pre-K to Grade 1 readers. Use ONLY:
+- Simple, positive language
+- Short sentences (5-8 words)
+- Familiar concepts
+- NO mention of death, violence, hardship, or conflict
+- Focus on ONE simple achievement
+
+CREATE A "MEET ${figure.name.toUpperCase()}" STORY:
+
+Write a very simple, joyful introduction to ${figure.name} for ages 3-6.
+
+STRUCTURE (4-5 pages, ~30 words per page):
+1. Meet ${figure.name}! (Who they are)
+2. ${figure.name} loved to... (What they enjoyed)
+3. ${figure.name} worked hard and... (Simple achievement)
+4. Because of ${figure.name}... (How it helps us)
+5. ${childName ? `${childName}, you` : 'You'} can be like ${figure.name}! (Inspiration)
+
+FOCUS ON:
+- ${figure.focusAreas[0]}
+- ${figure.characterTraits[0]}
+
+TONE: Warm, simple, celebratory
+
+OUTPUT: JSON with title, pages (text + illustration_prompt), and one_big_idea
+`.trim()
+}
+
+/**
+ * Generate a comparative biography prompt (two figures)
+ */
+export function generateComparativeBiographyPrompt(
+  figure1: BiographyFigure,
+  figure2: BiographyFigure,
+  ageBand: AgeBand,
+  comparisonFocus: 'shared_traits' | 'different_paths' | 'same_field'
+): string {
+  const ageBandConfig = AGE_BANDS[ageBand]
+
+  // Find shared traits
+  const sharedTraits = figure1.characterTraits.filter(
+    t => figure2.characterTraits.includes(t)
+  )
+
+  return `
+COMPARATIVE BIOGRAPHY STORY
+
+Create a story that introduces TWO inspiring figures who share something in common.
+
+FIGURES:
+1. ${figure1.name} (${figure1.nationality}, ${figure1.era})
+   - Known for: ${figure1.keyAchievements[0]}
+   - Character: ${figure1.characterTraits.join(', ')}
+
+2. ${figure2.name} (${figure2.nationality}, ${figure2.era})
+   - Known for: ${figure2.keyAchievements[0]}
+   - Character: ${figure2.characterTraits.join(', ')}
+
+COMPARISON FOCUS: ${comparisonFocus}
+${sharedTraits.length > 0 ? `SHARED TRAITS: ${sharedTraits.join(', ')}` : ''}
+
+TARGET: ${ageBand} (${ageBandConfig.label})
+
+STORY STRUCTURE:
+1. Introduction - Two different people, same great quality
+2. Figure 1's story (brief)
+3. Figure 2's story (brief)
+4. What they share / How they're alike
+5. What we can learn from both
+
+LENGTH: ${ageBandConfig.minAge < 8 ? '400-600' : '600-900'} words
+
+EDUCATIONAL GOALS:
+- Show that greatness comes in many forms
+- Highlight ${sharedTraits[0] || 'perseverance'}
+- Inspire readers to find their own path
+
+OUTPUT: JSON with title, story_pages, shared_lesson, and vocabulary_words
+`.trim()
+}
+
+/**
+ * Get the biography themes for category prompts
+ */
+export const BIOGRAPHY_THEMES = CATEGORY_THEMES.biography
+
+/**
+ * Export biography prompt utilities
+ */
+export const BiographyPrompts = {
+  generate: generateBiographyPrompt,
+  getRecommendations: getBiographyRecommendations,
+  generateYoungReader: generateYoungReaderBiographyPrompt,
+  generateComparative: generateComparativeBiographyPrompt,
+  themes: BIOGRAPHY_THEMES,
+}

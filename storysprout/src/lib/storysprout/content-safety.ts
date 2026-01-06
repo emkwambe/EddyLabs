@@ -1225,3 +1225,437 @@ export function getContentSafetySummary(ageBand: AgeBand): {
     guidelines,
   }
 }
+
+// =====================================================
+// BIOGRAPHY-SPECIFIC CONTENT SAFETY
+// =====================================================
+
+import {
+  BiographySubjectType,
+  BiographySensitivity,
+  BiographyFigure,
+  BIOGRAPHY_SUBJECTS,
+  CURATED_BIOGRAPHY_FIGURES,
+  getBiographySubjectsForAge,
+  isBiographySubjectAllowed,
+} from './types'
+
+/**
+ * Biography content validation result
+ */
+export interface BiographyValidationResult extends ContentValidationResult {
+  subjectAllowed: boolean
+  sensitivityLevel: BiographySensitivity
+  requiredDisclaimer?: string
+  suggestedFigures: BiographyFigure[]
+  avoidTopics: string[]
+  focusAreas: string[]
+}
+
+/**
+ * Topics that are universally prohibited in all biographies
+ */
+export const BIOGRAPHY_PROHIBITED_TOPICS = [
+  // Violence and graphic content
+  'assassination details',
+  'murder details',
+  'torture',
+  'graphic violence',
+  'war atrocities',
+  'genocide details',
+  'execution details',
+
+  // Personal scandals
+  'affairs',
+  'adultery',
+  'sexual misconduct',
+  'substance addiction details',
+  'alcoholism details',
+  'drug use details',
+
+  // Exploitation
+  'slave ownership glorification',
+  'colonialism glorification',
+  'exploitation glorification',
+
+  // Political bias
+  'political endorsement',
+  'partisan advocacy',
+  'election influence',
+  'voting recommendations',
+
+  // Religious proselytizing
+  'religious conversion',
+  'religious superiority',
+  'miracle claims as fact',
+  'afterlife claims as fact',
+]
+
+/**
+ * Topics that require age-appropriate handling (not prohibited but need care)
+ */
+export const BIOGRAPHY_SENSITIVE_TOPICS: Record<string, { minAge: number; handling: string }> = {
+  'slavery': { minAge: 6, handling: 'Focus on overcoming injustice, not graphic details' },
+  'segregation': { minAge: 6, handling: 'Focus on courage and peaceful change' },
+  'discrimination': { minAge: 6, handling: 'Explain unfairness simply, focus on overcoming' },
+  'persecution': { minAge: 8, handling: 'Focus on resilience, avoid graphic details' },
+  'imprisonment': { minAge: 8, handling: 'Focus on perseverance and hope' },
+  'war': { minAge: 8, handling: 'Focus on peace-making, not combat details' },
+  'death': { minAge: 5, handling: 'Handle gently, focus on legacy and impact' },
+  'illness': { minAge: 5, handling: 'Focus on courage and perseverance' },
+  'disability': { minAge: 4, handling: 'Focus on abilities and achievements' },
+  'poverty': { minAge: 5, handling: 'Focus on overcoming challenges' },
+  'protest': { minAge: 8, handling: 'Focus on peaceful methods and positive outcomes' },
+  'revolution': { minAge: 12, handling: 'Provide historical context, avoid violence glorification' },
+}
+
+/**
+ * Validate a biography subject for a specific age band
+ */
+export function validateBiographySubject(
+  subjectType: BiographySubjectType,
+  ageBand: AgeBand
+): BiographyValidationResult {
+  const result: BiographyValidationResult = {
+    isValid: true,
+    violations: [],
+    warnings: [],
+    suggestions: [],
+    subjectAllowed: true,
+    sensitivityLevel: 'safe',
+    suggestedFigures: [],
+    avoidTopics: [],
+    focusAreas: [],
+  }
+
+  const subjectConfig = BIOGRAPHY_SUBJECTS[subjectType]
+
+  // Check if subject type is allowed for this age
+  if (!isBiographySubjectAllowed(subjectType, ageBand)) {
+    result.isValid = false
+    result.subjectAllowed = false
+    result.violations.push(
+      `Biography subject type "${subjectConfig.label}" is not appropriate for ${ageBand}. ` +
+      `Minimum age: ${subjectConfig.minAge}`
+    )
+
+    // Suggest alternative subject types
+    const allowedSubjects = getBiographySubjectsForAge(ageBand)
+    result.suggestions.push(
+      `Recommended subject types: ${allowedSubjects.slice(0, 5).join(', ')}`
+    )
+  }
+
+  result.sensitivityLevel = subjectConfig.sensitivity
+  result.avoidTopics = subjectConfig.avoidTopics
+  result.focusAreas = subjectConfig.focusAreas
+
+  // Add required disclaimer if needed
+  if (subjectConfig.requiredDisclaimer) {
+    result.requiredDisclaimer = subjectConfig.requiredDisclaimer
+    result.warnings.push(`Disclaimer required: ${subjectConfig.requiredDisclaimer}`)
+  }
+
+  // Add sensitivity warnings
+  if (subjectConfig.sensitivity === 'moderate') {
+    result.warnings.push(
+      `Subject type "${subjectConfig.label}" requires age-appropriate handling. ` +
+      `Focus on: ${subjectConfig.focusAreas.join(', ')}`
+    )
+  } else if (subjectConfig.sensitivity === 'sensitive') {
+    result.warnings.push(
+      `Subject type "${subjectConfig.label}" requires careful, sensitive handling. ` +
+      `Must avoid: ${subjectConfig.avoidTopics.join(', ')}`
+    )
+  } else if (subjectConfig.sensitivity === 'restricted') {
+    result.warnings.push(
+      `Subject type "${subjectConfig.label}" is restricted to older students. ` +
+      `Requires educational context and balanced perspective.`
+    )
+  }
+
+  // Suggest curated figures for this age and subject type
+  result.suggestedFigures = CURATED_BIOGRAPHY_FIGURES.filter(
+    figure => figure.subjectType === subjectType &&
+    BIOGRAPHY_SUBJECTS[subjectType].allowedAgeBands.includes(ageBand)
+  )
+
+  return result
+}
+
+/**
+ * Validate biography content text for prohibited topics
+ */
+export function validateBiographyContent(
+  content: string,
+  subjectType: BiographySubjectType,
+  ageBand: AgeBand
+): BiographyValidationResult {
+  const result = validateBiographySubject(subjectType, ageBand)
+  const lowerContent = content.toLowerCase()
+  const ageRange = AGE_BANDS[ageBand]
+
+  // Check for universally prohibited topics
+  for (const prohibited of BIOGRAPHY_PROHIBITED_TOPICS) {
+    if (lowerContent.includes(prohibited.toLowerCase())) {
+      result.isValid = false
+      result.violations.push(`Prohibited biography topic: "${prohibited}"`)
+    }
+  }
+
+  // Check for age-restricted sensitive topics
+  for (const [topic, config] of Object.entries(BIOGRAPHY_SENSITIVE_TOPICS)) {
+    if (lowerContent.includes(topic.toLowerCase())) {
+      if (ageRange.minAge < config.minAge) {
+        result.warnings.push(
+          `Sensitive topic "${topic}" detected. ` +
+          `Recommended minimum age: ${config.minAge}. ` +
+          `Handling guidance: ${config.handling}`
+        )
+      }
+    }
+  }
+
+  // Check subject-specific avoid topics
+  const subjectConfig = BIOGRAPHY_SUBJECTS[subjectType]
+  for (const avoidTopic of subjectConfig.avoidTopics) {
+    if (lowerContent.includes(avoidTopic.toLowerCase())) {
+      result.warnings.push(
+        `Topic "${avoidTopic}" should be avoided for ${subjectConfig.label} biographies`
+      )
+    }
+  }
+
+  // Check for appropriate focus areas
+  const hasFocusArea = subjectConfig.focusAreas.some(
+    focus => lowerContent.includes(focus.toLowerCase())
+  )
+  if (!hasFocusArea) {
+    result.suggestions.push(
+      `Consider emphasizing these focus areas: ${subjectConfig.focusAreas.join(', ')}`
+    )
+  }
+
+  return result
+}
+
+/**
+ * Validate a specific biography figure for an age band
+ */
+export function validateBiographyFigure(
+  figureName: string,
+  ageBand: AgeBand
+): BiographyValidationResult {
+  const result: BiographyValidationResult = {
+    isValid: true,
+    violations: [],
+    warnings: [],
+    suggestions: [],
+    subjectAllowed: true,
+    sensitivityLevel: 'safe',
+    suggestedFigures: [],
+    avoidTopics: [],
+    focusAreas: [],
+  }
+
+  const ageRange = AGE_BANDS[ageBand]
+  const lowerName = figureName.toLowerCase()
+
+  // Check if figure is in curated list
+  const curatedFigure = CURATED_BIOGRAPHY_FIGURES.find(
+    f => f.name.toLowerCase() === lowerName
+  )
+
+  if (curatedFigure) {
+    // Figure is in curated list - check age appropriateness
+    if (ageRange.minAge < curatedFigure.minAge) {
+      result.isValid = false
+      result.violations.push(
+        `${curatedFigure.name} is recommended for ages ${curatedFigure.minAge}+ ` +
+        `(current age band: ${ageBand})`
+      )
+    }
+
+    if (!curatedFigure.safeForYoungest && ageRange.minAge < 5) {
+      result.warnings.push(
+        `${curatedFigure.name} may require additional context for youngest readers`
+      )
+    }
+
+    result.sensitivityLevel = BIOGRAPHY_SUBJECTS[curatedFigure.subjectType].sensitivity
+    result.focusAreas = curatedFigure.focusAreas
+    result.suggestedFigures = [curatedFigure]
+
+    result.suggestions.push(
+      `Key achievements to highlight: ${curatedFigure.keyAchievements.join(', ')}`
+    )
+    result.suggestions.push(
+      `Character traits to emphasize: ${curatedFigure.characterTraits.join(', ')}`
+    )
+  } else {
+    // Figure is not in curated list - require additional caution
+    result.warnings.push(
+      `"${figureName}" is not in the curated biography figures list. ` +
+      `Additional content review recommended.`
+    )
+
+    // Suggest similar curated figures
+    const suggestedFigures = CURATED_BIOGRAPHY_FIGURES.filter(
+      f => f.minAge <= ageRange.maxAge && f.maxAge >= ageRange.minAge
+    ).slice(0, 5)
+
+    result.suggestedFigures = suggestedFigures
+    result.suggestions.push(
+      `Consider using curated figures: ${suggestedFigures.map(f => f.name).join(', ')}`
+    )
+  }
+
+  return result
+}
+
+/**
+ * Get biography safety guidelines for an age band
+ */
+export function getBiographySafetyGuidelines(ageBand: AgeBand): {
+  allowedSubjectTypes: BiographySubjectType[]
+  restrictedSubjectTypes: BiographySubjectType[]
+  sensitiveTopicsToAvoid: string[]
+  suggestedFigures: BiographyFigure[]
+  contentGuidelines: string[]
+} {
+  const ageRange = AGE_BANDS[ageBand]
+  const schoolLevel = getSchoolLevel(ageBand)
+
+  const allowedSubjectTypes = getBiographySubjectsForAge(ageBand)
+  const allSubjectTypes = Object.keys(BIOGRAPHY_SUBJECTS) as BiographySubjectType[]
+  const restrictedSubjectTypes = allSubjectTypes.filter(
+    t => !allowedSubjectTypes.includes(t)
+  )
+
+  // Get sensitive topics that are restricted for this age
+  const sensitiveTopicsToAvoid = Object.entries(BIOGRAPHY_SENSITIVE_TOPICS)
+    .filter(([, config]) => ageRange.minAge < config.minAge)
+    .map(([topic]) => topic)
+
+  // Get suggested figures for this age
+  const suggestedFigures = CURATED_BIOGRAPHY_FIGURES.filter(
+    f => f.minAge <= ageRange.maxAge && f.maxAge >= ageRange.minAge
+  )
+
+  // Age-specific content guidelines
+  let contentGuidelines: string[]
+  switch (schoolLevel) {
+    case 'early_childhood':
+      contentGuidelines = [
+        'Focus on simple, positive achievements',
+        'Use age-appropriate vocabulary',
+        'Emphasize kindness, creativity, and curiosity',
+        'Avoid any mention of death, violence, or hardship',
+        'Keep stories short and engaging',
+        'Use animal metaphors when helpful',
+      ]
+      break
+    case 'elementary':
+      contentGuidelines = [
+        'Focus on character traits and positive achievements',
+        'Introduce concept of overcoming challenges simply',
+        'Can mention historical context briefly',
+        'Avoid graphic details of hardship or violence',
+        'Emphasize perseverance, courage, and kindness',
+        'Can include figures who faced unfairness, focus on triumph',
+      ]
+      break
+    case 'middle_school':
+      contentGuidelines = [
+        'Can explore more complex historical context',
+        'Discuss social movements age-appropriately',
+        'Can address discrimination and injustice',
+        'Focus on positive change and resilience',
+        'Can include activists and civil rights leaders',
+        'Avoid graphic violence or political bias',
+      ]
+      break
+    case 'high_school':
+      contentGuidelines = [
+        'Can explore nuanced historical figures',
+        'Complex themes handled with maturity',
+        'Critical thinking about historical context',
+        'Can discuss controversy with balanced perspective',
+        'Political figures without partisan bias',
+        'Universal prohibitions still apply',
+      ]
+      break
+    default:
+      contentGuidelines = ['Follow strictest content guidelines']
+  }
+
+  return {
+    allowedSubjectTypes,
+    restrictedSubjectTypes,
+    sensitiveTopicsToAvoid,
+    suggestedFigures,
+    contentGuidelines,
+  }
+}
+
+/**
+ * Generate biography prompt safety wrapper
+ * This wraps the biography request with appropriate guardrails
+ */
+export function generateBiographySafetyWrapper(
+  figureName: string,
+  subjectType: BiographySubjectType,
+  ageBand: AgeBand
+): {
+  isAllowed: boolean
+  safetyInstructions: string
+  avoidTopics: string[]
+  focusAreas: string[]
+  disclaimer?: string
+} {
+  const subjectValidation = validateBiographySubject(subjectType, ageBand)
+  const figureValidation = validateBiographyFigure(figureName, ageBand)
+  const guidelines = getBiographySafetyGuidelines(ageBand)
+
+  const isAllowed = subjectValidation.isValid && figureValidation.isValid
+
+  // Combine avoid topics
+  const avoidTopics = [
+    ...BIOGRAPHY_PROHIBITED_TOPICS,
+    ...subjectValidation.avoidTopics,
+    ...guidelines.sensitiveTopicsToAvoid,
+  ]
+
+  // Get focus areas
+  const focusAreas = subjectValidation.focusAreas
+
+  // Build safety instructions for the AI
+  const safetyInstructions = `
+BIOGRAPHY CONTENT SAFETY REQUIREMENTS:
+Age Band: ${ageBand} (${AGE_BANDS[ageBand].label})
+Subject Type: ${BIOGRAPHY_SUBJECTS[subjectType].label}
+Sensitivity Level: ${subjectValidation.sensitivityLevel}
+
+CONTENT GUIDELINES:
+${guidelines.contentGuidelines.map(g => `- ${g}`).join('\n')}
+
+TOPICS TO AVOID:
+${avoidTopics.slice(0, 10).map(t => `- ${t}`).join('\n')}
+
+RECOMMENDED FOCUS AREAS:
+${focusAreas.map(f => `- ${f}`).join('\n')}
+
+${subjectValidation.requiredDisclaimer ? `REQUIRED DISCLAIMER: ${subjectValidation.requiredDisclaimer}` : ''}
+
+IMPORTANT: This biography must be age-appropriate, factually accurate (for achievements and character traits),
+and focus on positive lessons without political bias, religious proselytizing, or graphic content.
+`.trim()
+
+  return {
+    isAllowed,
+    safetyInstructions,
+    avoidTopics,
+    focusAreas,
+    disclaimer: subjectValidation.requiredDisclaimer,
+  }
+}

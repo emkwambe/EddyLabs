@@ -2098,3 +2098,632 @@ export function getRecommendedValuesForCategory(category: StoryCategory): CoreVa
 
   return categoryValues[category] || ['kindness', 'respect', 'empathy'];
 }
+
+// =====================================================
+// BIOGRAPHY GUARDRAILS & TAXONOMY
+// =====================================================
+
+/**
+ * Biography subject categories - determines content filtering level
+ */
+export type BiographySubjectType =
+  // Safe for all ages - minimal filtering needed
+  | 'scientist'
+  | 'inventor'
+  | 'artist'
+  | 'musician'
+  | 'author'
+  | 'poet'
+  | 'athlete'
+  | 'explorer'
+  | 'astronaut'
+  | 'naturalist'
+  | 'mathematician'
+  | 'educator'
+  | 'humanitarian'
+  | 'chef'
+  | 'architect'
+  // Needs age-appropriate filtering
+  | 'civil_rights_leader'
+  | 'political_leader'
+  | 'activist'
+  | 'military_leader'
+  | 'revolutionary'
+  | 'philosopher'
+  | 'religious_leader'
+  // Special handling required
+  | 'controversial_historical'
+  | 'contemporary_political';
+
+/**
+ * Biography content sensitivity levels
+ */
+export type BiographySensitivity = 'safe' | 'moderate' | 'sensitive' | 'restricted';
+
+/**
+ * Biography subject configuration
+ */
+export interface BiographySubjectConfig {
+  type: BiographySubjectType;
+  label: string;
+  sensitivity: BiographySensitivity;
+  minAge: number;
+  allowedAgeBands: AgeBand[];
+  focusAreas: string[];
+  avoidTopics: string[];
+  requiredDisclaimer?: string;
+}
+
+/**
+ * Full biography subject taxonomy with guardrails
+ */
+export const BIOGRAPHY_SUBJECTS: Record<BiographySubjectType, BiographySubjectConfig> = {
+  // SAFE FOR ALL AGES
+  scientist: {
+    type: 'scientist',
+    label: 'Scientists',
+    sensitivity: 'safe',
+    minAge: 2,
+    allowedAgeBands: ['pre_k', 'kindergarten', 'grade_1', 'grade_2', 'grade_3', 'grade_4', 'grade_5', 'grade_6', 'grade_7', 'grade_8', 'grade_9', 'grade_10', 'grade_11', 'grade_12', 'adult'],
+    focusAreas: ['curiosity', 'discovery', 'experimentation', 'perseverance', 'asking questions', 'problem-solving'],
+    avoidTopics: ['weapons research', 'unethical experiments', 'personal scandals'],
+  },
+  inventor: {
+    type: 'inventor',
+    label: 'Inventors',
+    sensitivity: 'safe',
+    minAge: 2,
+    allowedAgeBands: ['pre_k', 'kindergarten', 'grade_1', 'grade_2', 'grade_3', 'grade_4', 'grade_5', 'grade_6', 'grade_7', 'grade_8', 'grade_9', 'grade_10', 'grade_11', 'grade_12', 'adult'],
+    focusAreas: ['creativity', 'innovation', 'problem-solving', 'persistence', 'imagination', 'improving lives'],
+    avoidTopics: ['patent disputes', 'business controversies', 'personal failures'],
+  },
+  artist: {
+    type: 'artist',
+    label: 'Artists',
+    sensitivity: 'safe',
+    minAge: 2,
+    allowedAgeBands: ['pre_k', 'kindergarten', 'grade_1', 'grade_2', 'grade_3', 'grade_4', 'grade_5', 'grade_6', 'grade_7', 'grade_8', 'grade_9', 'grade_10', 'grade_11', 'grade_12', 'adult'],
+    focusAreas: ['creativity', 'self-expression', 'practice', 'seeing the world differently', 'sharing beauty'],
+    avoidTopics: ['mental health struggles', 'substance abuse', 'controversial artwork', 'personal scandals'],
+  },
+  musician: {
+    type: 'musician',
+    label: 'Musicians',
+    sensitivity: 'safe',
+    minAge: 2,
+    allowedAgeBands: ['pre_k', 'kindergarten', 'grade_1', 'grade_2', 'grade_3', 'grade_4', 'grade_5', 'grade_6', 'grade_7', 'grade_8', 'grade_9', 'grade_10', 'grade_11', 'grade_12', 'adult'],
+    focusAreas: ['practice', 'dedication', 'joy of music', 'sharing talents', 'collaboration', 'cultural heritage'],
+    avoidTopics: ['substance abuse', 'controversial lyrics', 'personal scandals', 'industry exploitation'],
+  },
+  author: {
+    type: 'author',
+    label: 'Authors & Writers',
+    sensitivity: 'safe',
+    minAge: 2,
+    allowedAgeBands: ['pre_k', 'kindergarten', 'grade_1', 'grade_2', 'grade_3', 'grade_4', 'grade_5', 'grade_6', 'grade_7', 'grade_8', 'grade_9', 'grade_10', 'grade_11', 'grade_12', 'adult'],
+    focusAreas: ['imagination', 'storytelling', 'reading', 'persistence', 'observing the world', 'sharing ideas'],
+    avoidTopics: ['controversial works', 'political views', 'personal struggles', 'banned book controversies'],
+  },
+  poet: {
+    type: 'poet',
+    label: 'Poets',
+    sensitivity: 'safe',
+    minAge: 2,
+    allowedAgeBands: ['pre_k', 'kindergarten', 'grade_1', 'grade_2', 'grade_3', 'grade_4', 'grade_5', 'grade_6', 'grade_7', 'grade_8', 'grade_9', 'grade_10', 'grade_11', 'grade_12', 'adult'],
+    focusAreas: ['language love', 'emotion expression', 'observation', 'rhythm and rhyme', 'nature appreciation'],
+    avoidTopics: ['dark themes', 'political poetry', 'personal tragedies', 'controversial content'],
+  },
+  athlete: {
+    type: 'athlete',
+    label: 'Athletes',
+    sensitivity: 'safe',
+    minAge: 2,
+    allowedAgeBands: ['pre_k', 'kindergarten', 'grade_1', 'grade_2', 'grade_3', 'grade_4', 'grade_5', 'grade_6', 'grade_7', 'grade_8', 'grade_9', 'grade_10', 'grade_11', 'grade_12', 'adult'],
+    focusAreas: ['dedication', 'practice', 'teamwork', 'sportsmanship', 'overcoming challenges', 'healthy living'],
+    avoidTopics: ['doping scandals', 'personal controversies', 'injuries in detail', 'contract disputes'],
+  },
+  explorer: {
+    type: 'explorer',
+    label: 'Explorers',
+    sensitivity: 'safe',
+    minAge: 2,
+    allowedAgeBands: ['pre_k', 'kindergarten', 'grade_1', 'grade_2', 'grade_3', 'grade_4', 'grade_5', 'grade_6', 'grade_7', 'grade_8', 'grade_9', 'grade_10', 'grade_11', 'grade_12', 'adult'],
+    focusAreas: ['curiosity', 'bravery', 'discovery', 'perseverance', 'learning about new places'],
+    avoidTopics: ['colonialism', 'exploitation', 'violence against indigenous peoples', 'deaths in exploration'],
+  },
+  astronaut: {
+    type: 'astronaut',
+    label: 'Astronauts',
+    sensitivity: 'safe',
+    minAge: 2,
+    allowedAgeBands: ['pre_k', 'kindergarten', 'grade_1', 'grade_2', 'grade_3', 'grade_4', 'grade_5', 'grade_6', 'grade_7', 'grade_8', 'grade_9', 'grade_10', 'grade_11', 'grade_12', 'adult'],
+    focusAreas: ['courage', 'teamwork', 'scientific curiosity', 'training and preparation', 'wonder of space'],
+    avoidTopics: ['space disasters in detail', 'political space race tensions', 'personal struggles'],
+  },
+  naturalist: {
+    type: 'naturalist',
+    label: 'Naturalists & Conservationists',
+    sensitivity: 'safe',
+    minAge: 2,
+    allowedAgeBands: ['pre_k', 'kindergarten', 'grade_1', 'grade_2', 'grade_3', 'grade_4', 'grade_5', 'grade_6', 'grade_7', 'grade_8', 'grade_9', 'grade_10', 'grade_11', 'grade_12', 'adult'],
+    focusAreas: ['nature love', 'animal care', 'environmental protection', 'observation', 'patience'],
+    avoidTopics: ['animal cruelty details', 'hunting controversies', 'environmental disasters in detail'],
+  },
+  mathematician: {
+    type: 'mathematician',
+    label: 'Mathematicians',
+    sensitivity: 'safe',
+    minAge: 2,
+    allowedAgeBands: ['pre_k', 'kindergarten', 'grade_1', 'grade_2', 'grade_3', 'grade_4', 'grade_5', 'grade_6', 'grade_7', 'grade_8', 'grade_9', 'grade_10', 'grade_11', 'grade_12', 'adult'],
+    focusAreas: ['problem-solving', 'pattern recognition', 'logical thinking', 'persistence', 'curiosity'],
+    avoidTopics: ['mental health struggles', 'academic rivalries', 'personal difficulties'],
+  },
+  educator: {
+    type: 'educator',
+    label: 'Educators & Teachers',
+    sensitivity: 'safe',
+    minAge: 2,
+    allowedAgeBands: ['pre_k', 'kindergarten', 'grade_1', 'grade_2', 'grade_3', 'grade_4', 'grade_5', 'grade_6', 'grade_7', 'grade_8', 'grade_9', 'grade_10', 'grade_11', 'grade_12', 'adult'],
+    focusAreas: ['helping others learn', 'patience', 'dedication', 'making a difference', 'lifelong learning'],
+    avoidTopics: ['educational controversies', 'political education debates', 'institutional failures'],
+  },
+  humanitarian: {
+    type: 'humanitarian',
+    label: 'Humanitarians',
+    sensitivity: 'safe',
+    minAge: 2,
+    allowedAgeBands: ['pre_k', 'kindergarten', 'grade_1', 'grade_2', 'grade_3', 'grade_4', 'grade_5', 'grade_6', 'grade_7', 'grade_8', 'grade_9', 'grade_10', 'grade_11', 'grade_12', 'adult'],
+    focusAreas: ['helping others', 'kindness', 'compassion', 'making the world better', 'service'],
+    avoidTopics: ['graphic suffering', 'war details', 'organizational controversies', 'political aspects'],
+  },
+  chef: {
+    type: 'chef',
+    label: 'Chefs & Culinary Artists',
+    sensitivity: 'safe',
+    minAge: 2,
+    allowedAgeBands: ['pre_k', 'kindergarten', 'grade_1', 'grade_2', 'grade_3', 'grade_4', 'grade_5', 'grade_6', 'grade_7', 'grade_8', 'grade_9', 'grade_10', 'grade_11', 'grade_12', 'adult'],
+    focusAreas: ['creativity', 'cultural traditions', 'sharing food', 'hard work', 'learning and practice'],
+    avoidTopics: ['industry exploitation', 'personal struggles', 'restaurant failures'],
+  },
+  architect: {
+    type: 'architect',
+    label: 'Architects & Designers',
+    sensitivity: 'safe',
+    minAge: 2,
+    allowedAgeBands: ['pre_k', 'kindergarten', 'grade_1', 'grade_2', 'grade_3', 'grade_4', 'grade_5', 'grade_6', 'grade_7', 'grade_8', 'grade_9', 'grade_10', 'grade_11', 'grade_12', 'adult'],
+    focusAreas: ['creativity', 'problem-solving', 'imagining new things', 'building for people', 'art and science'],
+    avoidTopics: ['building disasters', 'professional controversies', 'political building projects'],
+  },
+
+  // MODERATE SENSITIVITY - Needs age filtering
+  civil_rights_leader: {
+    type: 'civil_rights_leader',
+    label: 'Civil Rights Leaders',
+    sensitivity: 'moderate',
+    minAge: 6,
+    allowedAgeBands: ['grade_1', 'grade_2', 'grade_3', 'grade_4', 'grade_5', 'grade_6', 'grade_7', 'grade_8', 'grade_9', 'grade_10', 'grade_11', 'grade_12', 'adult'],
+    focusAreas: ['fairness', 'equality', 'courage', 'peaceful change', 'standing up for what is right', 'helping others'],
+    avoidTopics: ['graphic violence', 'assassination details', 'explicit racism descriptions', 'hateful imagery'],
+    requiredDisclaimer: 'This story discusses historical injustices in an age-appropriate way.',
+  },
+  political_leader: {
+    type: 'political_leader',
+    label: 'Political Leaders',
+    sensitivity: 'moderate',
+    minAge: 8,
+    allowedAgeBands: ['grade_3', 'grade_4', 'grade_5', 'grade_6', 'grade_7', 'grade_8', 'grade_9', 'grade_10', 'grade_11', 'grade_12', 'adult'],
+    focusAreas: ['leadership', 'public service', 'decision-making', 'working with others', 'civic responsibility'],
+    avoidTopics: ['partisan politics', 'political controversies', 'scandals', 'wars in detail', 'current political debates'],
+    requiredDisclaimer: 'This story focuses on leadership qualities without political endorsement.',
+  },
+  activist: {
+    type: 'activist',
+    label: 'Activists & Advocates',
+    sensitivity: 'moderate',
+    minAge: 8,
+    allowedAgeBands: ['grade_3', 'grade_4', 'grade_5', 'grade_6', 'grade_7', 'grade_8', 'grade_9', 'grade_10', 'grade_11', 'grade_12', 'adult'],
+    focusAreas: ['passion for causes', 'making a difference', 'persistence', 'speaking up', 'community organizing'],
+    avoidTopics: ['violent protests', 'controversial tactics', 'divisive political issues', 'current political debates'],
+    requiredDisclaimer: 'This story focuses on positive change-making without political advocacy.',
+  },
+  military_leader: {
+    type: 'military_leader',
+    label: 'Military Leaders',
+    sensitivity: 'moderate',
+    minAge: 10,
+    allowedAgeBands: ['grade_5', 'grade_6', 'grade_7', 'grade_8', 'grade_9', 'grade_10', 'grade_11', 'grade_12', 'adult'],
+    focusAreas: ['leadership', 'strategy', 'courage', 'protecting others', 'discipline', 'teamwork'],
+    avoidTopics: ['graphic battle scenes', 'war atrocities', 'death counts', 'PTSD', 'political war justifications'],
+    requiredDisclaimer: 'This story focuses on leadership qualities in historical context.',
+  },
+  revolutionary: {
+    type: 'revolutionary',
+    label: 'Revolutionary Figures',
+    sensitivity: 'sensitive',
+    minAge: 12,
+    allowedAgeBands: ['grade_7', 'grade_8', 'grade_9', 'grade_10', 'grade_11', 'grade_12', 'adult'],
+    focusAreas: ['courage', 'standing up for beliefs', 'historical change', 'leadership in difficult times'],
+    avoidTopics: ['violence glorification', 'graphic revolutionary violence', 'political ideology promotion'],
+    requiredDisclaimer: 'This story presents historical figures in context without endorsing violence or ideology.',
+  },
+  philosopher: {
+    type: 'philosopher',
+    label: 'Philosophers & Thinkers',
+    sensitivity: 'moderate',
+    minAge: 10,
+    allowedAgeBands: ['grade_5', 'grade_6', 'grade_7', 'grade_8', 'grade_9', 'grade_10', 'grade_11', 'grade_12', 'adult'],
+    focusAreas: ['asking big questions', 'thinking deeply', 'logic', 'understanding the world', 'wisdom'],
+    avoidTopics: ['religious criticism', 'nihilism', 'controversial philosophical positions', 'adult themes'],
+  },
+  religious_leader: {
+    type: 'religious_leader',
+    label: 'Religious Leaders',
+    sensitivity: 'sensitive',
+    minAge: 8,
+    allowedAgeBands: ['grade_3', 'grade_4', 'grade_5', 'grade_6', 'grade_7', 'grade_8', 'grade_9', 'grade_10', 'grade_11', 'grade_12', 'adult'],
+    focusAreas: ['compassion', 'service to others', 'kindness', 'community building', 'peace'],
+    avoidTopics: ['religious doctrine', 'religious superiority', 'conversion', 'religious conflicts', 'miracles as fact'],
+    requiredDisclaimer: 'This story presents the figure\'s humanitarian contributions without religious instruction.',
+  },
+
+  // RESTRICTED - Special handling required
+  controversial_historical: {
+    type: 'controversial_historical',
+    label: 'Controversial Historical Figures',
+    sensitivity: 'restricted',
+    minAge: 14,
+    allowedAgeBands: ['grade_9', 'grade_10', 'grade_11', 'grade_12', 'adult'],
+    focusAreas: ['historical context', 'learning from history', 'complexity of human nature', 'critical thinking'],
+    avoidTopics: ['glorification', 'justification of harmful actions', 'graphic details'],
+    requiredDisclaimer: 'This story examines a complex historical figure for educational purposes.',
+  },
+  contemporary_political: {
+    type: 'contemporary_political',
+    label: 'Contemporary Political Figures',
+    sensitivity: 'restricted',
+    minAge: 16,
+    allowedAgeBands: ['grade_11', 'grade_12', 'adult'],
+    focusAreas: ['civic engagement', 'public service', 'leadership styles', 'critical analysis'],
+    avoidTopics: ['partisan endorsement', 'political attacks', 'current controversies', 'election influence'],
+    requiredDisclaimer: 'This story presents information without political endorsement or advocacy.',
+  },
+};
+
+/**
+ * Get biography subjects appropriate for an age band
+ */
+export function getBiographySubjectsForAge(ageBand: AgeBand): BiographySubjectType[] {
+  return (Object.keys(BIOGRAPHY_SUBJECTS) as BiographySubjectType[]).filter(
+    subject => BIOGRAPHY_SUBJECTS[subject].allowedAgeBands.includes(ageBand)
+  );
+}
+
+/**
+ * Check if a biography subject is appropriate for an age band
+ */
+export function isBiographySubjectAllowed(subject: BiographySubjectType, ageBand: AgeBand): boolean {
+  return BIOGRAPHY_SUBJECTS[subject].allowedAgeBands.includes(ageBand);
+}
+
+/**
+ * Get sensitivity level for a biography subject
+ */
+export function getBiographySensitivity(subject: BiographySubjectType): BiographySensitivity {
+  return BIOGRAPHY_SUBJECTS[subject].sensitivity;
+}
+
+// =====================================================
+// CURATED SAFE BIOGRAPHY FIGURES
+// =====================================================
+
+export interface BiographyFigure {
+  name: string;
+  subjectType: BiographySubjectType;
+  minAge: number;
+  maxAge: number;
+  nationality: string;
+  era: string;
+  focusAreas: string[];
+  keyAchievements: string[];
+  characterTraits: CoreValue[];
+  safeForYoungest: boolean;
+}
+
+/**
+ * Curated list of safe biography figures by category
+ * These figures have been vetted for age-appropriate content
+ */
+export const CURATED_BIOGRAPHY_FIGURES: BiographyFigure[] = [
+  // SCIENTISTS - Safe for all ages
+  {
+    name: 'Marie Curie',
+    subjectType: 'scientist',
+    minAge: 4,
+    maxAge: 18,
+    nationality: 'Polish-French',
+    era: '1867-1934',
+    focusAreas: ['scientific discovery', 'perseverance', 'breaking barriers'],
+    keyAchievements: ['First woman to win Nobel Prize', 'Discovered radium and polonium', 'Pioneer in radioactivity research'],
+    characterTraits: ['perseverance', 'curiosity', 'courage'],
+    safeForYoungest: true,
+  },
+  {
+    name: 'George Washington Carver',
+    subjectType: 'scientist',
+    minAge: 4,
+    maxAge: 18,
+    nationality: 'American',
+    era: '1864-1943',
+    focusAreas: ['agricultural science', 'helping farmers', 'creativity'],
+    keyAchievements: ['Discovered hundreds of uses for peanuts', 'Helped poor farmers', 'Champion of sustainable farming'],
+    characterTraits: ['creativity', 'kindness', 'perseverance'],
+    safeForYoungest: true,
+  },
+  {
+    name: 'Jane Goodall',
+    subjectType: 'naturalist',
+    minAge: 3,
+    maxAge: 18,
+    nationality: 'British',
+    era: '1934-present',
+    focusAreas: ['animal behavior', 'conservation', 'following dreams'],
+    keyAchievements: ['Revolutionary chimpanzee research', 'Global conservation work', 'Youth education advocate'],
+    characterTraits: ['patience', 'empathy', 'perseverance'],
+    safeForYoungest: true,
+  },
+  {
+    name: 'Mae Jemison',
+    subjectType: 'astronaut',
+    minAge: 4,
+    maxAge: 18,
+    nationality: 'American',
+    era: '1956-present',
+    focusAreas: ['space exploration', 'breaking barriers', 'science and arts'],
+    keyAchievements: ['First African American woman in space', 'Doctor and engineer', 'STEM education advocate'],
+    characterTraits: ['courage', 'curiosity', 'perseverance'],
+    safeForYoungest: true,
+  },
+  {
+    name: 'Albert Einstein',
+    subjectType: 'scientist',
+    minAge: 5,
+    maxAge: 18,
+    nationality: 'German-American',
+    era: '1879-1955',
+    focusAreas: ['imagination', 'thinking differently', 'curiosity'],
+    keyAchievements: ['Theory of relativity', 'Nobel Prize in Physics', 'Changed how we understand the universe'],
+    characterTraits: ['curiosity', 'creativity', 'perseverance'],
+    safeForYoungest: true,
+  },
+
+  // ARTISTS & MUSICIANS - Safe for all ages
+  {
+    name: 'Frida Kahlo',
+    subjectType: 'artist',
+    minAge: 6,
+    maxAge: 18,
+    nationality: 'Mexican',
+    era: '1907-1954',
+    focusAreas: ['self-expression', 'cultural pride', 'overcoming challenges'],
+    keyAchievements: ['Unique artistic style', 'Cultural icon', 'Celebrated Mexican heritage'],
+    characterTraits: ['courage', 'creativity', 'resilience'],
+    safeForYoungest: false, // Some themes require maturity
+  },
+  {
+    name: 'Ludwig van Beethoven',
+    subjectType: 'musician',
+    minAge: 4,
+    maxAge: 18,
+    nationality: 'German',
+    era: '1770-1827',
+    focusAreas: ['perseverance', 'music creation', 'overcoming obstacles'],
+    keyAchievements: ['Composed while deaf', 'Created timeless symphonies', 'Revolutionized classical music'],
+    characterTraits: ['perseverance', 'creativity', 'courage'],
+    safeForYoungest: true,
+  },
+  {
+    name: 'Yo-Yo Ma',
+    subjectType: 'musician',
+    minAge: 3,
+    maxAge: 18,
+    nationality: 'American',
+    era: '1955-present',
+    focusAreas: ['practice', 'sharing music', 'cultural connection'],
+    keyAchievements: ['World-renowned cellist', 'Silk Road Project founder', 'Music education advocate'],
+    characterTraits: ['generosity', 'perseverance', 'creativity'],
+    safeForYoungest: true,
+  },
+
+  // AUTHORS - Safe for all ages
+  {
+    name: 'Dr. Seuss (Theodor Geisel)',
+    subjectType: 'author',
+    minAge: 3,
+    maxAge: 12,
+    nationality: 'American',
+    era: '1904-1991',
+    focusAreas: ['imagination', 'creativity', 'reading joy'],
+    keyAchievements: ['Beloved children\'s books', 'Made reading fun', 'Creative wordplay'],
+    characterTraits: ['creativity', 'optimism', 'generosity'],
+    safeForYoungest: true,
+  },
+  {
+    name: 'Roald Dahl',
+    subjectType: 'author',
+    minAge: 5,
+    maxAge: 14,
+    nationality: 'British',
+    era: '1916-1990',
+    focusAreas: ['imagination', 'adventure', 'standing up to bullies'],
+    keyAchievements: ['Beloved children\'s stories', 'Charlie and the Chocolate Factory', 'Matilda'],
+    characterTraits: ['creativity', 'courage', 'kindness'],
+    safeForYoungest: true,
+  },
+
+  // ATHLETES - Safe for all ages
+  {
+    name: 'Simone Biles',
+    subjectType: 'athlete',
+    minAge: 4,
+    maxAge: 18,
+    nationality: 'American',
+    era: '1997-present',
+    focusAreas: ['dedication', 'mental health', 'excellence'],
+    keyAchievements: ['Most decorated gymnast', 'Olympic champion', 'Mental health advocate'],
+    characterTraits: ['courage', 'perseverance', 'self_discipline'],
+    safeForYoungest: true,
+  },
+  {
+    name: 'Jackie Robinson',
+    subjectType: 'athlete',
+    minAge: 5,
+    maxAge: 18,
+    nationality: 'American',
+    era: '1919-1972',
+    focusAreas: ['courage', 'breaking barriers', 'dignity'],
+    keyAchievements: ['First African American in MLB', 'Hall of Fame', 'Civil rights pioneer'],
+    characterTraits: ['courage', 'self_discipline', 'integrity'],
+    safeForYoungest: true,
+  },
+  {
+    name: 'Serena Williams',
+    subjectType: 'athlete',
+    minAge: 4,
+    maxAge: 18,
+    nationality: 'American',
+    era: '1981-present',
+    focusAreas: ['hard work', 'determination', 'family support'],
+    keyAchievements: ['23 Grand Slam titles', 'Tennis champion', 'Inspiration for young athletes'],
+    characterTraits: ['perseverance', 'self_discipline', 'courage'],
+    safeForYoungest: true,
+  },
+
+  // EXPLORERS & ASTRONAUTS - Safe for all ages
+  {
+    name: 'Neil Armstrong',
+    subjectType: 'astronaut',
+    minAge: 4,
+    maxAge: 18,
+    nationality: 'American',
+    era: '1930-2012',
+    focusAreas: ['courage', 'exploration', 'teamwork'],
+    keyAchievements: ['First person on the moon', 'Naval aviator', 'Quiet hero'],
+    characterTraits: ['courage', 'humility', 'perseverance'],
+    safeForYoungest: true,
+  },
+  {
+    name: 'Jacques Cousteau',
+    subjectType: 'explorer',
+    minAge: 4,
+    maxAge: 18,
+    nationality: 'French',
+    era: '1910-1997',
+    focusAreas: ['ocean exploration', 'conservation', 'curiosity'],
+    keyAchievements: ['Ocean exploration pioneer', 'Invented SCUBA equipment', 'Marine conservation'],
+    characterTraits: ['curiosity', 'environmental_stewardship', 'courage'],
+    safeForYoungest: true,
+  },
+
+  // HUMANITARIANS - Safe for all ages
+  {
+    name: 'Clara Barton',
+    subjectType: 'humanitarian',
+    minAge: 5,
+    maxAge: 18,
+    nationality: 'American',
+    era: '1821-1912',
+    focusAreas: ['helping others', 'nursing', 'organizing relief'],
+    keyAchievements: ['Founded American Red Cross', 'Civil War nurse', 'Disaster relief pioneer'],
+    characterTraits: ['caring', 'courage', 'service'],
+    safeForYoungest: true,
+  },
+  {
+    name: 'Fred Rogers',
+    subjectType: 'educator',
+    minAge: 3,
+    maxAge: 12,
+    nationality: 'American',
+    era: '1928-2003',
+    focusAreas: ['kindness', 'emotional learning', 'being a good neighbor'],
+    keyAchievements: ['Mister Rogers\' Neighborhood', 'Children\'s television pioneer', 'Emotional education'],
+    characterTraits: ['kindness', 'patience', 'empathy'],
+    safeForYoungest: true,
+  },
+
+  // CIVIL RIGHTS LEADERS - Age-filtered
+  {
+    name: 'Martin Luther King Jr.',
+    subjectType: 'civil_rights_leader',
+    minAge: 6,
+    maxAge: 18,
+    nationality: 'American',
+    era: '1929-1968',
+    focusAreas: ['peaceful change', 'equality', 'dreams for a better world'],
+    keyAchievements: ['Civil rights leader', 'Nobel Peace Prize', 'I Have a Dream speech'],
+    characterTraits: ['courage', 'justice', 'perseverance'],
+    safeForYoungest: false,
+  },
+  {
+    name: 'Rosa Parks',
+    subjectType: 'civil_rights_leader',
+    minAge: 5,
+    maxAge: 18,
+    nationality: 'American',
+    era: '1913-2005',
+    focusAreas: ['standing up for rights', 'quiet courage', 'dignity'],
+    keyAchievements: ['Montgomery Bus Boycott', 'Civil rights icon', 'Congressional Gold Medal'],
+    characterTraits: ['courage', 'integrity', 'perseverance'],
+    safeForYoungest: true,
+  },
+  {
+    name: 'Nelson Mandela',
+    subjectType: 'civil_rights_leader',
+    minAge: 8,
+    maxAge: 18,
+    nationality: 'South African',
+    era: '1918-2013',
+    focusAreas: ['forgiveness', 'reconciliation', 'long journey to freedom'],
+    keyAchievements: ['Ended apartheid', 'First Black South African president', 'Nobel Peace Prize'],
+    characterTraits: ['forgiveness', 'perseverance', 'leadership'],
+    safeForYoungest: false,
+  },
+  {
+    name: 'Malala Yousafzai',
+    subjectType: 'activist',
+    minAge: 7,
+    maxAge: 18,
+    nationality: 'Pakistani',
+    era: '1997-present',
+    focusAreas: ['education rights', 'speaking up', 'courage'],
+    keyAchievements: ['Youngest Nobel Prize laureate', 'Education activist', 'Malala Fund founder'],
+    characterTraits: ['courage', 'perseverance', 'justice'],
+    safeForYoungest: false,
+  },
+];
+
+/**
+ * Get curated figures appropriate for an age band
+ */
+export function getCuratedFiguresForAge(ageBand: AgeBand): BiographyFigure[] {
+  const ageRange = AGE_BANDS[ageBand];
+  const minAge = ageRange.minAge;
+  const maxAge = ageRange.maxAge;
+
+  return CURATED_BIOGRAPHY_FIGURES.filter(figure =>
+    figure.minAge <= maxAge && figure.maxAge >= minAge
+  );
+}
+
+/**
+ * Get curated figures by subject type
+ */
+export function getCuratedFiguresByType(subjectType: BiographySubjectType): BiographyFigure[] {
+  return CURATED_BIOGRAPHY_FIGURES.filter(figure => figure.subjectType === subjectType);
+}
+
+/**
+ * Get safe figures for youngest readers (Pre-K to Grade 1)
+ */
+export function getSafeFiguresForYoungest(): BiographyFigure[] {
+  return CURATED_BIOGRAPHY_FIGURES.filter(figure => figure.safeForYoungest);
+}

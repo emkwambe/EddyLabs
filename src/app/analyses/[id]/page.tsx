@@ -9,6 +9,13 @@ import { AlertTriangle, CheckCircle, MessageSquare, Copy, ArrowLeft } from 'luci
 import Link from 'next/link'
 import { FeedbackSection } from './FeedbackSection'
 import { CopyButton } from './CopyButton'
+import { VehicleShopContext } from '@/components/analysis/VehicleShopContext'
+import { SavingsCallout } from '@/components/analysis/SavingsCallout'
+import { PricingGauge } from '@/components/analysis/PricingGauge'
+import { FeeAnalysisPanel } from '@/components/analysis/FeeAnalysisPanel'
+import { DoubleBillingAlert } from '@/components/analysis/DoubleBillingAlert'
+import { ShopReputationCard } from '@/components/analysis/ShopReputationCard'
+import type { VehicleInfo, ShopInfo, FeeAnalysisResult, DoubleBillingResult, PriceComparison, ShopReputationResult } from '@/lib/types'
 
 export default async function AnalysisDetailPage({
   params,
@@ -67,7 +74,15 @@ export default async function AnalysisDetailPage({
       line_total?: number
     }>
     taxes_and_fees?: Array<{ name: string; amount: number }>
+    vehicle_info?: VehicleInfo | null
+    shop_info?: ShopInfo | null
   } | null
+
+  // Extract additional analysis fields
+  const feeAnalysis = analysis.fee_analysis as FeeAnalysisResult | null | undefined
+  const doubleBilling = analysis.double_billing_check as DoubleBillingResult | null | undefined
+  const priceComparison = analysis.price_comparison as PriceComparison | null | undefined
+  const shopReputation = analysis.shop_reputation as ShopReputationResult | null | undefined
 
   return (
     <div className="min-h-screen flex flex-col bg-gray-50">
@@ -82,6 +97,15 @@ export default async function AnalysisDetailPage({
             <ArrowLeft className="h-4 w-4 mr-1" />
             Back to Dashboard
           </Link>
+
+          {/* Vehicle and Shop Context */}
+          <VehicleShopContext
+            vehicleInfo={extractedFields?.vehicle_info}
+            shopInfo={extractedFields?.shop_info}
+          />
+
+          {/* Savings Callout */}
+          <SavingsCallout priceComparison={priceComparison} />
 
           {/* Header */}
           <Card className="mb-6">
@@ -144,6 +168,47 @@ export default async function AnalysisDetailPage({
                 <p className="text-gray-700">{analysis.summary}</p>
               </CardContent>
             </Card>
+          )}
+
+          {/* Pricing Analysis & Shop Reputation */}
+          {(priceComparison || feeAnalysis || shopReputation) && (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+              {/* Left column: Pricing & Fees */}
+              {(priceComparison || feeAnalysis) && (
+                <Card>
+                  <CardHeader>
+                    <h2 className="text-lg font-semibold">Pricing Analysis</h2>
+                  </CardHeader>
+                  <CardContent className="space-y-6">
+                    <PricingGauge priceComparison={priceComparison} />
+                    {feeAnalysis && (
+                      <div className="pt-6 border-t border-gray-200">
+                        <FeeAnalysisPanel feeAnalysis={feeAnalysis} />
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+              )}
+
+              {/* Right column: Shop Reputation */}
+              {shopReputation && (
+                <Card>
+                  <CardHeader>
+                    <h2 className="text-lg font-semibold">Shop Information</h2>
+                  </CardHeader>
+                  <CardContent>
+                    <ShopReputationCard reputation={shopReputation} />
+                  </CardContent>
+                </Card>
+              )}
+            </div>
+          )}
+
+          {/* Double Billing Alert */}
+          {doubleBilling && doubleBilling.hasDoubleBilling && (
+            <div className="mb-6">
+              <DoubleBillingAlert doubleBilling={doubleBilling} />
+            </div>
           )}
 
           {/* Red Flags */}

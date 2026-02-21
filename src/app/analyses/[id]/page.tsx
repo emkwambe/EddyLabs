@@ -16,6 +16,9 @@ import { FeeAnalysisPanel } from '@/components/analysis/FeeAnalysisPanel'
 import { DoubleBillingAlert } from '@/components/analysis/DoubleBillingAlert'
 import { ShopReputationCard } from '@/components/analysis/ShopReputationCard'
 import type { VehicleInfo, ShopInfo, FeeAnalysisResult, DoubleBillingResult, PriceComparison, ShopReputationResult } from '@/lib/types'
+import { matchAllLineItems } from '@/lib/pricing/price-matcher'
+import type { PricingQueryOptions } from '@/lib/pricing/auto-repair-db'
+import { AlertCircle, CheckCircle2 } from 'lucide-react'
 
 export default async function AnalysisDetailPage({
   params,
@@ -83,6 +86,18 @@ export default async function AnalysisDetailPage({
   const doubleBilling = analysis.double_billing_check as DoubleBillingResult | null | undefined
   const priceComparison = analysis.price_comparison as PriceComparison | null | undefined
   const shopReputation = analysis.shop_reputation as ShopReputationResult | null | undefined
+
+  // Match line items to pricing database (for Fair Price column)
+  let lineItemMatches: Awaited<ReturnType<typeof matchAllLineItems>> = []
+  if (analysis.document_type === 'ESTIMATE_AUTO' && extractedFields?.line_items && extractedFields.line_items.length > 0) {
+    const queryOptions: PricingQueryOptions = {}
+    if (extractedFields.vehicle_info) {
+      if (extractedFields.vehicle_info.make) queryOptions.make = extractedFields.vehicle_info.make
+      if (extractedFields.vehicle_info.model) queryOptions.model = extractedFields.vehicle_info.model
+      if (extractedFields.vehicle_info.year) queryOptions.year = extractedFields.vehicle_info.year
+    }
+    lineItemMatches = await matchAllLineItems(extractedFields.line_items, queryOptions)
+  }
 
   return (
     <div className="min-h-screen flex flex-col bg-gray-50">
@@ -264,6 +279,11 @@ export default async function AnalysisDetailPage({
             <Card className="mb-6">
               <CardHeader>
                 <h2 className="text-lg font-semibold">Cost Breakdown</h2>
+                {analysis.document_type === 'ESTIMATE_AUTO' && lineItemMatches.length > 0 && (
+                  <p className="text-sm text-gray-600 mt-1">
+                    Fair prices are based on national averages for similar services
+                  </p>
+                )}
               </CardHeader>
               <CardContent>
                 <div className="overflow-x-auto">
@@ -274,21 +294,72 @@ export default async function AnalysisDetailPage({
                         <th className="text-right py-2 font-medium">Qty</th>
                         <th className="text-right py-2 font-medium">Price</th>
                         <th className="text-right py-2 font-medium">Total</th>
+                        {analysis.document_type === 'ESTIMATE_AUTO' && lineItemMatches.length > 0 && (
+                          <>
+                            <th className="text-right py-2 font-medium">Fair Price</th>
+                            <th className="text-center py-2 font-medium">Status</th>
+                          </>
+                        )}
                       </tr>
                     </thead>
                     <tbody>
-                      {extractedFields.line_items.map((item, i) => (
-                        <tr key={i} className="border-b border-gray-100">
-                          <td className="py-2">{item.description}</td>
-                          <td className="text-right py-2">{item.quantity || '-'}</td>
-                          <td className="text-right py-2">
-                            {item.unit_price ? formatCurrency(item.unit_price) : '-'}
-                          </td>
-                          <td className="text-right py-2 font-medium">
-                            {item.line_total ? formatCurrency(item.line_total) : '-'}
-                          </td>
-                        </tr>
-                      ))}
+                      {extractedFields.line_items.map((item, i) => {
+                        const match = lineItemMatches[i]
+                        const isOverpriced = match?.isOverpriced || false
+                        const hasFairPrice = match?.matchedService && match.confidence >= 50
+
+                        return (
+                          <tr
+                            key={i}
+                            className={`border-b border-gray-100 ${isOverpriced ? 'bg-danger-50' : ''}`}
+                          >
+                            <td className="py-2">{item.description}</td>
+                            <td className="text-right py-2">{item.quantity || '-'}</td>
+                            <td className="text-right py-2">
+                              {item.unit_price ? formatCurrency(item.unit_price) : '-'}
+                            </td>
+                            <td className="text-right py-2 font-medium">
+                              {item.line_total ? formatCurrency(item.line_total) : '-'}
+                            </td>
+                            {analysis.document_type === 'ESTIMATE_AUTO' && lineItemMatches.length > 0 && (
+                              <>
+                                <td className="text-right py-2 text-gray-600">
+                                  {hasFairPrice && match.fairPriceMin && match.fairPriceMax ? (
+                                    <span title={`Confidence: ${match.confidence}%`}>
+                                      {formatCurrency(match.fairPriceMin)}-{formatCurrency(match.fairPriceMax)}
+                                    </span>
+                                  ) : (
+                                    <span className="text-gray-400">—</span>
+                                  )}
+                                </td>
+                                <td className="text-center py-2">
+                                  {hasFairPrice ? (
+                                    isOverpriced ? (
+                                      <span
+                                        className="inline-flex items-center gap-1 text-danger-600 font-medium"
+                                        title={`Overcharged by ${formatCurrency(match.overchargeAmount)}`}
+                                      >
+                                        <AlertCircle className="h-4 w-4" />
+                                        HIGH
+                                      </span>
+                                    ) : (
+                                      <span
+                                        className="inline-flex items-center gap-1 text-success-600"
+                                        title="Within fair price range"
+                                      >
+                                        <CheckCircle2 className="h-4 w-4" />
+                                        FAIR
+                                      </span>
+                                    )
+                                  ) : (
+                                    <span className="text-gray-400">—</span>
+                                  )}
+                                </td>
+                              </>
+                            )}
+                          </tr>
+                        )
+                      })}
                       {extractedFields.taxes_and_fees?.map((fee, i) => (
                         <tr key={`fee-${i}`} className="border-b border-gray-100 text-gray-600">
                           <td className="py-2" colSpan={3}>
@@ -297,6 +368,12 @@ export default async function AnalysisDetailPage({
                           <td className="text-right py-2">
                             {formatCurrency(fee.amount)}
                           </td>
+                          {analysis.document_type === 'ESTIMATE_AUTO' && lineItemMatches.length > 0 && (
+                            <>
+                              <td className="text-right py-2 text-gray-400">—</td>
+                              <td className="text-center py-2 text-gray-400">—</td>
+                            </>
+                          )}
                         </tr>
                       ))}
                     </tbody>
@@ -309,6 +386,24 @@ export default async function AnalysisDetailPage({
                           <td className="text-right py-2">
                             {formatCurrency(extractedFields.total_cost)}
                           </td>
+                          {analysis.document_type === 'ESTIMATE_AUTO' && lineItemMatches.length > 0 && (
+                            <>
+                              <td className="text-right py-2">
+                                {priceComparison && (
+                                  <span className="text-gray-600">
+                                    {formatCurrency(priceComparison.fairPriceMin)}-{formatCurrency(priceComparison.fairPriceMax)}
+                                  </span>
+                                )}
+                              </td>
+                              <td className="text-center py-2">
+                                {priceComparison?.isOverpriced ? (
+                                  <span className="text-danger-600 font-medium">HIGH</span>
+                                ) : (
+                                  <span className="text-success-600">FAIR</span>
+                                )}
+                              </td>
+                            </>
+                          )}
                         </tr>
                       </tfoot>
                     )}

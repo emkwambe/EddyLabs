@@ -5,6 +5,8 @@
 import { createServiceClient } from '@/lib/supabase/server'
 import type { ExtractedFields, PriceComparison, VehicleInfo } from '@/lib/types'
 import { getComprehensivePricing } from '@/lib/api/externalApis'
+import { matchAllLineItems, getPriceMatchSummary } from '@/lib/pricing/price-matcher'
+import type { PricingQueryOptions } from '@/lib/pricing/auto-repair-db'
 
 interface ServiceNecessityCheck {
   service: string
@@ -27,41 +29,46 @@ export async function comparePrices(
   }
 
   try {
-    const supabase = await createServiceClient()
+    // Build query options from vehicle info
+    const queryOptions: PricingQueryOptions = {}
+    if (extractedFields.vehicle_info) {
+      if (extractedFields.vehicle_info.make) {
+        queryOptions.make = extractedFields.vehicle_info.make
+      }
+      if (extractedFields.vehicle_info.model) {
+        queryOptions.model = extractedFields.vehicle_info.model
+      }
+      if (extractedFields.vehicle_info.year) {
+        queryOptions.year = extractedFields.vehicle_info.year
+      }
+    }
 
-    // Get price benchmarks for each line item
+    // Match all line items to pricing database
+    const matches = await matchAllLineItems(extractedFields.line_items, queryOptions)
+    const matchSummary = getPriceMatchSummary(matches)
+
+    // Get price benchmarks from matched items
     let fairPriceMin = 0
     let fairPriceMax = 0
     let foundBenchmarks = false
     let confidence: 'HIGH' | 'MEDIUM' | 'LOW' = 'LOW'
 
-    for (const item of extractedFields.line_items) {
-      // Try external APIs first (RepairPal, etc.)
-      const externalPricing = await getComprehensivePricing(
-        item.description,
-        extractedFields.shop_info?.zip_code || undefined
-      )
-
-      if (externalPricing.hasPricing) {
-        // Use external pricing if available
-        fairPriceMin += externalPricing.localMin || externalPricing.nationalMin
-        fairPriceMax += externalPricing.localMax || externalPricing.nationalMax
+    // Sum up fair prices from all matches
+    for (const match of matches) {
+      if (match.matchedService && match.confidence >= 50) {
+        fairPriceMin += match.fairPriceMin || 0
+        fairPriceMax += match.fairPriceMax || 0
         foundBenchmarks = true
-        confidence = externalPricing.confidence
-      } else {
-        // Fall back to internal database benchmarks
-        const { data, error } = await supabase.rpc('get_price_benchmark', {
-          p_service_name: item.description,
-          p_vehicle_type: 'sedan' // Default to sedan, could be enhanced with vehicle_info
-        })
-
-        if (!error && data && data.length > 0 && data[0].found) {
-          fairPriceMin += data[0].price_min || 0
-          fairPriceMax += data[0].price_max || 0
-          foundBenchmarks = true
-          confidence = 'MEDIUM'
-        }
       }
+    }
+
+    // Determine confidence based on match rate and average confidence
+    if (matchSummary.matchRate >= 80 && matchSummary.averageConfidence >= 70) {
+      confidence = 'HIGH'
+    } else if (matchSummary.matchRate >= 50 && matchSummary.averageConfidence >= 50) {
+      confidence = 'MEDIUM'
+    } else if (foundBenchmarks) {
+      confidence = 'LOW'
     }
 
     if (!foundBenchmarks) {

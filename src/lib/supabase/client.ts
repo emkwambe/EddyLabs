@@ -8,11 +8,16 @@ export function createClient() {
       cookies: {
         get(name: string) {
           if (typeof window === 'undefined') return undefined
-          const value = document.cookie
-            .split('; ')
-            .find(row => row.startsWith(`${name}=`))
-            ?.split('=')[1]
-          return value
+          try {
+            const value = document.cookie
+              .split('; ')
+              .find(row => row.startsWith(`${name}=`))
+              ?.split('=')[1]
+            return value ? decodeURIComponent(value) : undefined
+          } catch (error) {
+            console.warn('Failed to get cookie:', name, error)
+            return undefined
+          }
         },
         set(name: string, value: string, options: any) {
           if (typeof window === 'undefined') return

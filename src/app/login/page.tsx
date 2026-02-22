@@ -52,7 +52,7 @@ function LoginForm() {
     setError('')
 
     // Create a demo account with random email
-    const demoEmail = `demo-${Date.now()}@redflagradar.test`
+    const demoEmail = `demo-${Date.now()}@fairlytica.test`
     const demoPassword = 'demo123456'
 
     try {

@@ -1,4 +1,4 @@
-# RedFlagRadar
+# Fairlytica
 
 AI-powered consumer protection web app that helps detect hidden fees, shady charges, and predatory terms in bills, estimates, and contracts.
 
@@ -34,7 +34,7 @@ AI-powered consumer protection web app that helps detect hidden fees, shady char
 
 ```bash
 git clone <repository-url>
-cd redflagradar
+cd fairlytica
 ```
 
 ### 2. Install dependencies
@@ -236,4 +236,4 @@ For issues or questions, please open a GitHub issue.
 
 ---
 
-**Disclaimer**: RedFlagRadar is an informational tool and does not provide legal, financial, or professional advice. Always consult qualified professionals for important decisions.
+**Disclaimer**: Fairlytica is an informational tool and does not provide legal, financial, or professional advice. Always consult qualified professionals for important decisions.

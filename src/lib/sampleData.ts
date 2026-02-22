@@ -1,5 +1,5 @@
 /**
- * Sample test data for RedFlagRadar
+ * Sample test data for Fairlytica
  * Use these examples to test the analysis system
  */
 

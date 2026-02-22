@@ -30,7 +30,7 @@ export default async function HomePage() {
       name: 'Sarah Mitchell',
       role: 'Small Business Owner',
       content:
-        "RedFlagRadar caught a $450 overcharge on my auto repair bill. The mechanic tried to charge me for diagnostic labor AND a diagnostic fee. I confronted them with the analysis and they immediately adjusted the bill.",
+        "Fairlytica caught a $450 overcharge on my auto repair bill. The mechanic tried to charge me for diagnostic labor AND a diagnostic fee. I confronted them with the analysis and they immediately adjusted the bill.",
       rating: 5,
       savings: '$450',
     },
@@ -38,7 +38,7 @@ export default async function HomePage() {
       name: 'James Rodriguez',
       role: 'Teacher',
       content:
-        'My dental estimate had a bunch of unnecessary procedures. RedFlagRadar flagged them and gave me scripts to question my dentist. Saved me over $800!',
+        'My dental estimate had a bunch of unnecessary procedures. Fairlytica flagged them and gave me scripts to question my dentist. Saved me over $800!',
       rating: 5,
       savings: '$800',
     },
@@ -54,7 +54,7 @@ export default async function HomePage() {
 
   const faqItems = [
     {
-      question: 'How does RedFlagRadar detect hidden fees?',
+      question: 'How does Fairlytica detect hidden fees?',
       answer:
         'Our AI analyzes your document against thousands of patterns and industry standards. It looks for common red flags like double-billing, excessive markups, predatory terms, and unnecessary services. We also compare prices to industry benchmarks when applicable.',
     },
@@ -195,7 +195,7 @@ export default async function HomePage() {
                 See It In Action
               </h2>
               <p className="text-xl text-gray-600 max-w-2xl mx-auto">
-                Watch how RedFlagRadar analyzes a real auto repair estimate and
+                Watch how Fairlytica analyzes a real auto repair estimate and
                 identifies over $450 in potential savings.
               </p>
             </div>
@@ -356,7 +356,7 @@ export default async function HomePage() {
                 Real People, Real Savings
               </h2>
               <p className="text-xl text-gray-600 max-w-2xl mx-auto">
-                Join thousands who have saved money using RedFlagRadar
+                Join thousands who have saved money using Fairlytica
               </p>
             </div>
 
@@ -376,7 +376,7 @@ export default async function HomePage() {
                 Frequently Asked Questions
               </h2>
               <p className="text-xl text-gray-600">
-                Everything you need to know about RedFlagRadar
+                Everything you need to know about Fairlytica
               </p>
             </div>
 

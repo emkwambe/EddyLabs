@@ -96,7 +96,14 @@ export default async function AnalysisDetailPage({
       if (extractedFields.vehicle_info.model) queryOptions.model = extractedFields.vehicle_info.model
       if (extractedFields.vehicle_info.year) queryOptions.year = extractedFields.vehicle_info.year
     }
-    lineItemMatches = await matchAllLineItems(extractedFields.line_items, queryOptions)
+    // Normalize line items to ensure null instead of undefined for optional fields
+    const normalizedLineItems = extractedFields.line_items.map(item => ({
+      ...item,
+      quantity: item.quantity ?? null,
+      unit_price: item.unit_price ?? null,
+      line_total: item.line_total ?? null,
+    }))
+    lineItemMatches = await matchAllLineItems(normalizedLineItems, queryOptions)
   }
 
   return (

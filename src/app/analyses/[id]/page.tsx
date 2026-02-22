@@ -15,7 +15,9 @@ import { PricingGauge } from '@/components/analysis/PricingGauge'
 import { FeeAnalysisPanel } from '@/components/analysis/FeeAnalysisPanel'
 import { DoubleBillingAlert } from '@/components/analysis/DoubleBillingAlert'
 import { ShopReputationCard } from '@/components/analysis/ShopReputationCard'
-import type { VehicleInfo, ShopInfo, FeeAnalysisResult, DoubleBillingResult, PriceComparison, ShopReputationResult } from '@/lib/types'
+import { LaborRateCard } from '@/components/analysis/LaborRateCard'
+import { PartsMarkupCard } from '@/components/analysis/PartsMarkupCard'
+import type { VehicleInfo, ShopInfo, FeeAnalysisResult, DoubleBillingResult, PriceComparison, ShopReputationResult, LaborRateAnalysis, PartsMarkupAnalysis } from '@/lib/types'
 import { matchAllLineItems } from '@/lib/pricing/price-matcher'
 import type { PricingQueryOptions } from '@/lib/pricing/auto-repair-db'
 import { AlertCircle, CheckCircle2 } from 'lucide-react'
@@ -86,6 +88,8 @@ export default async function AnalysisDetailPage({
   const doubleBilling = analysis.double_billing_check as DoubleBillingResult | null | undefined
   const priceComparison = analysis.price_comparison as PriceComparison | null | undefined
   const shopReputation = analysis.shop_reputation as ShopReputationResult | null | undefined
+  const laborRateAnalysis = analysis.labor_rate_analysis as LaborRateAnalysis | null | undefined
+  const partsMarkupAnalysis = analysis.parts_markup_analysis as PartsMarkupAnalysis | null | undefined
 
   // Match line items to pricing database (for Fair Price column)
   let lineItemMatches: Awaited<ReturnType<typeof matchAllLineItems>> = []
@@ -220,6 +224,35 @@ export default async function AnalysisDetailPage({
                   </CardHeader>
                   <CardContent>
                     <ShopReputationCard reputation={shopReputation} />
+                  </CardContent>
+                </Card>
+              )}
+            </div>
+          )}
+
+          {/* Labor Rate & Parts Markup Analysis */}
+          {(laborRateAnalysis || partsMarkupAnalysis) && (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+              {/* Labor Rate Analysis */}
+              {laborRateAnalysis && (
+                <Card>
+                  <CardHeader>
+                    <h2 className="text-lg font-semibold">Labor Rate</h2>
+                  </CardHeader>
+                  <CardContent>
+                    <LaborRateCard laborRateAnalysis={laborRateAnalysis} />
+                  </CardContent>
+                </Card>
+              )}
+
+              {/* Parts Markup Analysis */}
+              {partsMarkupAnalysis && (
+                <Card>
+                  <CardHeader>
+                    <h2 className="text-lg font-semibold">Parts Pricing</h2>
+                  </CardHeader>
+                  <CardContent>
+                    <PartsMarkupCard partsMarkupAnalysis={partsMarkupAnalysis} />
                   </CardContent>
                 </Card>
               )}

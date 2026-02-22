@@ -4,7 +4,9 @@ import {
   type DocumentType,
   type ExtractedFields,
   type RedFlag,
-  type Recommendation
+  type Recommendation,
+  type LaborRateAnalysis,
+  type PartsMarkupAnalysis
 } from '@/lib/types'
 import {
   SUSPICIOUS_FEE_PATTERNS,
@@ -17,6 +19,8 @@ import {
 } from './config'
 import { comparePrices, checkServiceNecessity } from './priceComparison'
 import { getShopReputation } from '@/lib/api/externalApis'
+import { analyzeLaborRates } from '@/lib/pricing/labor-rate-analyzer'
+import { analyzePartsMarkup } from '@/lib/pricing/parts-markup-calculator'
 
 // Lazy initialization to avoid build-time errors
 let openaiClient: OpenAI | null = null
@@ -161,11 +165,55 @@ export async function analyzeDocument(rawText: string): Promise<AIAnalysisResult
     console.error('Shop reputation check failed:', error)
   }
 
-  // Step 10: Recalculate risk score with all new flags
+  // Step 10: Labor rate analysis (if applicable)
+  let laborRateAnalysis: LaborRateAnalysis | null = null
+  try {
+    if (documentType === 'ESTIMATE_AUTO' && extractedFields.line_items && extractedFields.line_items.length > 0 && extractedFields.shop_info?.zip_code) {
+      laborRateAnalysis = await analyzeLaborRates(
+        extractedFields.line_items,
+        extractedFields.shop_info.zip_code
+      )
+
+      if (laborRateAnalysis && laborRateAnalysis.isAboveMarket) {
+        redFlags.push({
+          flag_type: 'HIGH_TOTAL_COST',
+          severity: laborRateAnalysis.percentageAboveMarket > 30 ? 'HIGH' : 'MEDIUM',
+          explanation: `Labor rates are ${laborRateAnalysis.percentageAboveMarket}% above the market average for this area. Effective rate: $${laborRateAnalysis.effectiveLaborRate}/hr vs market range: $${laborRateAnalysis.marketRateMin}-$${laborRateAnalysis.marketRateMax}/hr.`,
+          snippet: null,
+        })
+      }
+    }
+  } catch (error) {
+    console.error('Labor rate analysis failed:', error)
+  }
+
+  // Step 11: Parts markup analysis (if applicable)
+  let partsMarkupAnalysis: PartsMarkupAnalysis | null = null
+  try {
+    if (documentType === 'ESTIMATE_AUTO' && extractedFields.line_items && extractedFields.line_items.length > 0) {
+      partsMarkupAnalysis = await analyzePartsMarkup(
+        extractedFields.line_items,
+        extractedFields.vehicle_info
+      )
+
+      if (partsMarkupAnalysis && partsMarkupAnalysis.totalExcessiveMarkup > 0) {
+        redFlags.push({
+          flag_type: 'HIGH_TOTAL_COST',
+          severity: partsMarkupAnalysis.averageMarkupPercentage > 150 ? 'HIGH' : 'MEDIUM',
+          explanation: `Parts markup is excessive: average ${partsMarkupAnalysis.averageMarkupPercentage}% markup vs typical 50-100% range. ${partsMarkupAnalysis.excessiveMarkupItems.length} items with >100% markup detected. Potential overcharge: $${partsMarkupAnalysis.totalExcessiveMarkup.toFixed(2)}.`,
+          snippet: null,
+        })
+      }
+    }
+  } catch (error) {
+    console.error('Parts markup analysis failed:', error)
+  }
+
+  // Step 12: Recalculate risk score with all new flags
   const finalRiskScore = calculateRiskScore(redFlags)
   const finalRiskLabel = getRiskLabel(finalRiskScore)
 
-  // Step 11: Generate summary and recommendations
+  // Step 13: Generate summary and recommendations
   const { summary, recommendations } = await generateSummaryAndAdvice(
     rawText,
     documentType,
@@ -176,7 +224,9 @@ export async function analyzeDocument(rawText: string): Promise<AIAnalysisResult
     doubleBillingCheck,
     priceComparison,
     serviceNecessityChecks,
-    shopReputation
+    shopReputation,
+    laborRateAnalysis,
+    partsMarkupAnalysis
   )
 
   return {
@@ -191,6 +241,8 @@ export async function analyzeDocument(rawText: string): Promise<AIAnalysisResult
     double_billing_check: doubleBillingCheck,
     price_comparison: priceComparison,
     shop_reputation: shopReputation,
+    labor_rate_analysis: laborRateAnalysis,
+    parts_markup_analysis: partsMarkupAnalysis,
   }
 }
 
@@ -487,7 +539,9 @@ async function generateSummaryAndAdvice(
   doubleBillingCheck: any | null,
   priceComparison: any | null,
   serviceNecessityChecks: any[],
-  shopReputation: any | null
+  shopReputation: any | null,
+  laborRateAnalysis: LaborRateAnalysis | null,
+  partsMarkupAnalysis: PartsMarkupAnalysis | null
 ): Promise<{
   summary: string
   recommendations: Omit<Recommendation, 'id' | 'analysis_id' | 'created_at'>[]
@@ -519,6 +573,20 @@ async function generateSummaryAndAdvice(
     additionalContext += `\nShop Reputation: ${shopReputation.shopName} - Rating: ${shopReputation.rating || 'N/A'}/5 (${shopReputation.totalReviews} reviews), Trust Score: ${shopReputation.trustScore}/100.`
     if (shopReputation.warnings.length > 0) {
       additionalContext += ` Warnings: ${shopReputation.warnings.join(', ')}.`
+    }
+  }
+
+  if (laborRateAnalysis) {
+    additionalContext += `\nLabor Rate Analysis: Effective rate is $${laborRateAnalysis.effectiveLaborRate}/hr (${laborRateAnalysis.totalLaborHours.toFixed(1)} hours, total: $${laborRateAnalysis.totalLaborCharged.toFixed(2)}). Market range: $${laborRateAnalysis.marketRateMin}-$${laborRateAnalysis.marketRateMax}/hr.`
+    if (laborRateAnalysis.isAboveMarket) {
+      additionalContext += ` Labor rate is ${laborRateAnalysis.percentageAboveMarket}% above market average.`
+    }
+  }
+
+  if (partsMarkupAnalysis) {
+    additionalContext += `\nParts Markup Analysis: Total parts charged: $${partsMarkupAnalysis.totalPartsCharged.toFixed(2)}, Estimated OEM cost: $${partsMarkupAnalysis.estimatedOEMCost.toFixed(2)}, Average markup: ${partsMarkupAnalysis.averageMarkupPercentage}%.`
+    if (partsMarkupAnalysis.excessiveMarkupItems.length > 0) {
+      additionalContext += ` Found ${partsMarkupAnalysis.excessiveMarkupItems.length} items with excessive markup (>100%). Potential overcharge: $${partsMarkupAnalysis.totalExcessiveMarkup.toFixed(2)}.`
     }
   }
 

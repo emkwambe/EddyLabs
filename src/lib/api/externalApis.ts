@@ -1,8 +1,14 @@
 /**
  * External API Integrations
- * - RepairPal for verified market pricing
+ * - VehicleDatabases.com for verified market pricing (Phase 4)
+ * - BLS API for labor rate data (Phase 4)
+ * - RepairPal for verified market pricing (legacy placeholder)
  * - Google Places for shop reputation verification
  */
+
+import { createClient } from '@/lib/supabase/server'
+import type { VehicleInfo, VehicleDatabasesPricingResponse, BLSLaborRateResponse } from '@/lib/types'
+import crypto from 'crypto'
 
 export interface RepairPalPricing {
   serviceName: string
@@ -256,5 +262,284 @@ export async function getComprehensivePricing(
     localMin,
     localMax,
     confidence,
+  }
+}
+
+/**
+ * Phase 4: VehicleDatabases.com API Integration
+ * Fetch real market pricing for auto repair services
+ */
+export async function getVehicleDatabasesPricing(
+  vehicleInfo: VehicleInfo,
+  serviceName: string,
+  zipCode?: string
+): Promise<VehicleDatabasesPricingResponse> {
+  const apiKey = process.env.VEHICLE_DATABASES_API_KEY
+  const apiUrl = process.env.VEHICLE_DATABASES_API_URL
+
+  if (!apiKey || !apiUrl) {
+    console.log('VehicleDatabases API not configured, skipping external pricing check')
+    return { success: false, error: 'API not configured' }
+  }
+
+  // Validate vehicle info
+  if (!vehicleInfo.year || !vehicleInfo.make || !vehicleInfo.model) {
+    return { success: false, error: 'Incomplete vehicle information' }
+  }
+
+  try {
+    // Check cache first (30-day TTL)
+    const cacheKey = crypto
+      .createHash('md5')
+      .update(`${vehicleInfo.year}-${vehicleInfo.make}-${vehicleInfo.model}-${serviceName}-${zipCode || 'national'}`)
+      .digest('hex')
+
+    const supabase = await createClient()
+    const { data: cached } = await supabase
+      .from('pricing_api_cache')
+      .select('pricing_data, expires_at')
+      .eq('cache_key', cacheKey)
+      .single()
+
+    if (cached && new Date(cached.expires_at) > new Date()) {
+      console.log('Using cached VehicleDatabases pricing')
+      return cached.pricing_data as VehicleDatabasesPricingResponse
+    }
+
+    // Make API call
+    const response = await fetch(`${apiUrl}/estimates`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${apiKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        year: vehicleInfo.year,
+        make: vehicleInfo.make,
+        model: vehicleInfo.model,
+        service: serviceName,
+        zip_code: zipCode,
+      }),
+    })
+
+    if (!response.ok) {
+      console.error('VehicleDatabases API error:', response.statusText)
+      return { success: false, error: `API error: ${response.statusText}` }
+    }
+
+    const apiData = await response.json()
+
+    // Transform to our format
+    const result: VehicleDatabasesPricingResponse = {
+      success: true,
+      data: {
+        vehicle: {
+          year: vehicleInfo.year,
+          make: vehicleInfo.make,
+          model: vehicleInfo.model,
+        },
+        service: serviceName,
+        pricing: {
+          parts: {
+            min: apiData.parts_min || 0,
+            max: apiData.parts_max || 0,
+          },
+          labor: {
+            hours_min: apiData.labor_hours_min || 0,
+            hours_max: apiData.labor_hours_max || 0,
+            rate_min: apiData.labor_rate_min || 0,
+            rate_max: apiData.labor_rate_max || 0,
+          },
+          total: {
+            min: apiData.total_min || 0,
+            max: apiData.total_max || 0,
+          },
+        },
+        confidence: apiData.confidence || 'MEDIUM',
+        location: zipCode,
+      },
+    }
+
+    // Cache the result (30-day expiration)
+    const expiresAt = new Date()
+    expiresAt.setDate(expiresAt.getDate() + 30)
+
+    await supabase.from('pricing_api_cache').upsert({
+      cache_key: cacheKey,
+      vehicle_year: vehicleInfo.year,
+      vehicle_make: vehicleInfo.make,
+      vehicle_model: vehicleInfo.model,
+      service_name: serviceName,
+      zip_code: zipCode || null,
+      pricing_data: result,
+      api_source: 'vehicledatabases',
+      expires_at: expiresAt.toISOString(),
+    })
+
+    return result
+  } catch (error) {
+    console.error('VehicleDatabases API error:', error)
+    return { success: false, error: error instanceof Error ? error.message : 'Unknown error' }
+  }
+}
+
+/**
+ * Phase 4: BLS API Integration
+ * Fetch labor rates by zip code from Bureau of Labor Statistics
+ */
+export async function getLaborRates(zipCode: string): Promise<BLSLaborRateResponse> {
+  const apiUrl = process.env.BLS_API_URL || 'https://api.bls.gov/publicAPI/v2'
+
+  if (!zipCode) {
+    return { success: false, error: 'Zip code required' }
+  }
+
+  try {
+    // Check database cache first
+    const supabase = await createClient()
+    const { data: cached } = await supabase
+      .from('labor_rates')
+      .select('*')
+      .eq('zip_code', zipCode)
+      .single()
+
+    if (cached) {
+      // Use cached data if less than 90 days old
+      const lastUpdated = new Date(cached.last_updated)
+      const ninetyDaysAgo = new Date()
+      ninetyDaysAgo.setDate(ninetyDaysAgo.getDate() - 90)
+
+      if (lastUpdated > ninetyDaysAgo) {
+        console.log('Using cached BLS labor rates')
+        return {
+          success: true,
+          data: {
+            zipCode: cached.zip_code,
+            region: cached.region,
+            averageWage: parseFloat(cached.average_mechanic_wage),
+            shopRateMin: parseFloat(cached.estimated_shop_rate_min),
+            shopRateMax: parseFloat(cached.estimated_shop_rate_max),
+            dataSource: cached.data_source,
+            lastUpdated: cached.last_updated,
+          },
+        }
+      }
+    }
+
+    // Map zip code to region (simplified - in production, use a zip code database)
+    const region = getRegionFromZipCode(zipCode)
+
+    // BLS API call for automotive service technicians wage data
+    // Series ID: OEUM493023000000003 (Mean hourly wage for Automotive Service Technicians and Mechanics)
+    const seriesId = 'OEUM493023000000003'
+
+    const response = await fetch(`${apiUrl}/timeseries/data/${seriesId}`, {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+    })
+
+    if (!response.ok) {
+      // Fallback to national average if API fails
+      return getFallbackLaborRate(zipCode, region)
+    }
+
+    const apiData = await response.json()
+
+    if (apiData.status !== 'REQUEST_SUCCEEDED' || !apiData.Results?.series?.[0]?.data?.[0]) {
+      return getFallbackLaborRate(zipCode, region)
+    }
+
+    // Get most recent wage data
+    const latestData = apiData.Results.series[0].data[0]
+    const averageWage = parseFloat(latestData.value)
+
+    // Apply multipliers to get shop rates (2.5x to 3.5x mechanic wage)
+    const shopRateMin = Math.round(averageWage * 2.5)
+    const shopRateMax = Math.round(averageWage * 3.5)
+
+    // Store in database
+    await supabase.from('labor_rates').upsert({
+      zip_code: zipCode,
+      region,
+      average_mechanic_wage: averageWage,
+      estimated_shop_rate_min: shopRateMin,
+      estimated_shop_rate_max: shopRateMax,
+      data_source: 'bls',
+      last_updated: new Date().toISOString(),
+    })
+
+    return {
+      success: true,
+      data: {
+        zipCode,
+        region,
+        averageWage,
+        shopRateMin,
+        shopRateMax,
+        dataSource: 'bls',
+        lastUpdated: new Date().toISOString(),
+      },
+    }
+  } catch (error) {
+    console.error('BLS API error:', error)
+    const region = getRegionFromZipCode(zipCode)
+    return getFallbackLaborRate(zipCode, region)
+  }
+}
+
+/**
+ * Helper: Get region from zip code (simplified mapping)
+ */
+function getRegionFromZipCode(zipCode: string): string {
+  const zip = parseInt(zipCode.substring(0, 3))
+
+  if (zip >= 0 && zip <= 99) return 'northeast'       // CT, MA, ME, NH, NJ, RI, VT
+  if (zip >= 100 && zip <= 199) return 'northeast'    // NY
+  if (zip >= 200 && zip <= 299) return 'northeast'    // DC, MD, NC, SC, VA, WV
+  if (zip >= 300 && zip <= 399) return 'southeast'    // AL, FL, GA, MS, TN
+  if (zip >= 400 && zip <= 499) return 'midwest'      // IN, KY, MI, OH
+  if (zip >= 500 && zip <= 599) return 'midwest'      // IA, MN, MT, ND, SD, WI
+  if (zip >= 600 && zip <= 699) return 'midwest'      // IL, KS, MO, NE
+  if (zip >= 700 && zip <= 799) return 'southwest'    // AR, LA, OK, TX
+  if (zip >= 800 && zip <= 899) return 'west'         // AZ, CO, ID, NM, NV, UT, WY
+  if (zip >= 900 && zip <= 999) return 'west'         // AK, CA, HI, OR, WA
+
+  return 'national'
+}
+
+/**
+ * Helper: Fallback labor rates when BLS API is unavailable
+ */
+function getFallbackLaborRate(zipCode: string, region: string): BLSLaborRateResponse {
+  // National averages as fallback (2026 estimates)
+  const regionalMultipliers: Record<string, number> = {
+    northeast: 1.15,
+    southeast: 0.90,
+    midwest: 0.95,
+    southwest: 0.95,
+    west: 1.20,
+    national: 1.00,
+  }
+
+  const nationalAvgWage = 24.50 // National average mechanic wage ($/hr estimate)
+  const multiplier = regionalMultipliers[region] || 1.0
+  const averageWage = nationalAvgWage * multiplier
+
+  const shopRateMin = Math.round(averageWage * 2.5)
+  const shopRateMax = Math.round(averageWage * 3.5)
+
+  return {
+    success: true,
+    data: {
+      zipCode,
+      region,
+      averageWage,
+      shopRateMin,
+      shopRateMax,
+      dataSource: 'fallback_estimate',
+      lastUpdated: new Date().toISOString(),
+    },
   }
 }

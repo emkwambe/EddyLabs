@@ -137,6 +137,8 @@ export interface AIAnalysisResult {
   double_billing_check?: DoubleBillingResult | null
   price_comparison?: PriceComparison | null
   shop_reputation?: ShopReputationResult | null
+  labor_rate_analysis?: LaborRateAnalysis | null
+  parts_markup_analysis?: PartsMarkupAnalysis | null
 }
 
 export interface FeeAnalysisResult {
@@ -179,4 +181,78 @@ export interface ShopReputationResult {
     text: string
     time: string
   }>
+}
+
+// Phase 4: Real Data Integrations
+export interface LaborRateAnalysis {
+  totalLaborCharged: number
+  totalLaborHours: number
+  effectiveLaborRate: number
+  marketRateMin: number
+  marketRateMax: number
+  percentageAboveMarket: number
+  isAboveMarket: boolean
+  confidence: 'HIGH' | 'MEDIUM' | 'LOW'
+  zipCode: string
+}
+
+export interface PartsMarkupAnalysis {
+  totalPartsCharged: number
+  estimatedOEMCost: number
+  averageMarkupPercentage: number
+  excessiveMarkupItems: Array<{
+    description: string
+    chargedPrice: number
+    oemPrice: number
+    markupPercentage: number
+  }>
+  totalExcessiveMarkup: number
+  confidence: 'HIGH' | 'MEDIUM' | 'LOW'
+}
+
+// VehicleDatabases API Types
+export interface VehicleDatabasesPricingResponse {
+  success: boolean
+  data?: {
+    vehicle: {
+      year: number
+      make: string
+      model: string
+    }
+    service: string
+    pricing: {
+      parts: {
+        min: number
+        max: number
+      }
+      labor: {
+        hours_min: number
+        hours_max: number
+        rate_min: number
+        rate_max: number
+      }
+      total: {
+        min: number
+        max: number
+      }
+    }
+    confidence: 'HIGH' | 'MEDIUM' | 'LOW'
+    location?: string
+  }
+  error?: string
+}
+
+// BLS API Types
+export interface BLSLaborRateResponse {
+  success: boolean
+  data?: {
+    zipCode: string
+    region: string
+    averageWage: number
+    shopRateMin: number
+    shopRateMax: number
+    dataSource: string
+    lastUpdated: string
+  }
+  error?: string
 }
